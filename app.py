@@ -727,6 +727,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/cliente":
             d = self._json()
+            if not str(d.get("nombre") or "").strip():
+                return self._send(400, {"error": "el cliente necesita un nombre"})
             cid = db.guardar_cliente(d, d.get("id"))
             return self._send(200, {"ok": True, "id": cid, "clientes": db.clientes()})
 
