@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biblioteca Láser</title>
+<style>
+  :root{
+    --bg:#14120F; --panel:#1E1B17; --panel2:#262119; --panel3:#2E2719; --line:#332C22;
+    --tx:#F2EBE0; --tx2:#B8AB99; --tx3:#7D7264;
+    --amb:#E8A33D; --amb2:#FFC46B; --amb-dim:#3A2D16;
+    --ok:#6FBF73; --info:#5FA8D3; --rojo:#E0654F; --violeta:#B48BD9;
+    --fd:"Bahnschrift","Segoe UI Semibold","Segoe UI",system-ui,sans-serif;
+    --fb:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+    --fm:"Consolas",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--fb);font-size:15px;line-height:1.5;overflow:hidden}
+  button,input,select,textarea{font-family:inherit}
+  input,select,textarea{background:var(--bg);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:9px 11px;font-size:14px;width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--amb);box-shadow:0 0 0 2px var(--amb-dim)}
+  textarea{resize:vertical;min-height:70px}
+  label.lb{display:block;font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);margin-bottom:5px}
+  .campo{margin-bottom:12px}
+  .fila2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .fila3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+  /* ---------- topbar ---------- */
+  .top{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
+  .logo{display:flex;align-items:center;gap:10px;flex:none}
+  .logo .ic{width:34px;height:34px;border-radius:9px;background:linear-gradient(140deg,var(--amb),#B87418);display:grid;place-items:center}
+  .logo .ic svg{width:19px;height:19px;fill:#14120F}
+  .logo .t{font-family:var(--fd);font-size:1.1rem}
+  .logo .t small{display:block;font-family:var(--fm);font-size:9px;color:var(--tx3);letter-spacing:.13em;text-transform:uppercase}
+  .tabs{display:flex;gap:4px;flex:none}
+  .tab{background:none;border:1px solid transparent;color:var(--tx2);padding:9px 15px;border-radius:9px;cursor:pointer;font-family:var(--fd);font-size:14px;display:flex;align-items:center;gap:7px}
+  .tab:hover{background:var(--panel2);color:var(--tx)}
+  .tab.on{background:var(--amb);color:#14120F;font-weight:600}
+  .tab .pill{background:rgba(0,0,0,.22);border-radius:99px;padding:1px 7px;font-family:var(--fm);font-size:10px}
+  .tab.on .pill{background:rgba(0,0,0,.25)}
+  .buscador{flex:1;position:relative;max-width:520px}
+  .buscador input{padding:11px 40px 11px 40px;font-size:15px;background:var(--bg)}
+  .buscador .lupa{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:17px;height:17px;stroke:var(--tx3);fill:none;stroke-width:2}
+  .buscador .x{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--tx3);cursor:pointer;font-size:19px;padding:2px 7px;display:none}
+  .buscador .x.on{display:block}
+  .cuenta{font-family:var(--fm);font-size:12px;color:var(--tx2);white-space:nowrap}
+  .cuenta b{color:var(--amb)}
+
+  /* ---------- layout ---------- */
+  .cuerpo{display:flex;height:calc(100vh - 56px)}
+  .lado{width:252px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:14px 12px 40px}
+  .lado h3{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3);margin:18px 0 8px;font-weight:600}
+  .lado h3:first-child{margin-top:0}
+  .fil{display:flex;flex-wrap:wrap;gap:6px}
+  .fb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:8px;padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .fb:hover{border-color:var(--amb);color:var(--tx)}
+  .fb.on{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
+  .limpiar-todo{width:100%;background:none;border:1px dashed var(--line);color:var(--tx3);border-radius:9px;padding:9px;cursor:pointer;font-size:12.5px;font-family:var(--fd)}
+  .limpiar-todo:hover{border-color:var(--rojo);color:var(--rojo);background:rgba(224,101,79,.08)}
+  .limpiar-todo.arriba{margin:0 0 16px}
+  .limpiar-todo.activo{border-style:solid;border-color:var(--amb);color:var(--amb2)}
+
+  /* categorías grandes (arriba, siempre a la vista) */
+  .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));gap:9px;margin-bottom:11px}
+  .cat-b{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 11px;cursor:pointer;text-align:center;transition:.13s;color:var(--tx2)}
+  .cat-b:hover{border-color:var(--amb);color:var(--tx);transform:translateY(-2px)}
+  .cat-b.on{background:var(--amb);border-color:var(--amb);color:#14120F}
+  .cat-b .ic{font-size:21px;line-height:1;margin-bottom:5px}
+  .cat-b .nm{font-family:var(--fd);font-size:13.5px;line-height:1.2}
+  .cat-b .n{font-family:var(--fm);font-size:10px;color:var(--tx3);margin-top:2px}
+  .cat-b.on .n{color:rgba(20,18,15,.65)}
+  .subs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:11px}
+  .subs:empty{display:none}
+  .sb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:99px;padding:7px 14px;font-size:12.5px;cursor:pointer;font-family:var(--fd)}
+  .sb:hover{border-color:var(--amb);color:var(--tx)}
+  .sb.on{background:var(--amb-dim);border-color:var(--amb);color:var(--amb2);font-weight:600}
+  .sb .n{font-family:var(--fm);font-size:9.5px;opacity:.65;margin-left:4px}
+  .activos{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:13px}
+  .activos:empty{display:none}
+  .act{background:var(--amb-dim);border:1px solid var(--amb);color:var(--amb2);border-radius:99px;padding:5px 8px 5px 12px;font-size:12px;display:inline-flex;align-items:center;gap:7px;font-family:var(--fd)}
+  .act button{background:rgba(0,0,0,.25);border:none;color:inherit;width:17px;height:17px;border-radius:50%;cursor:pointer;font-size:12px;line-height:1;padding:0}
+  .act button:hover{background:var(--rojo);color:#fff}
+  .act-limpiar{background:none;border:1px solid var(--line);color:var(--tx3);border-radius:99px;padding:6px 13px;font-size:12px;cursor:pointer;font-family:var(--fd)}
+  .act-limpiar:hover{border-color:var(--rojo);color:var(--rojo)}
+
+  .main{flex:1;overflow-y:auto;padding:18px 20px 70px}
+  .vista{display:none} .vista.on{display:block}
+  h2.tit{font-family:var(--fd);font-size:1.5rem;margin:0 0 4px}
+  .sub{color:var(--tx3);font-size:13.5px;margin:0 0 18px}
+
+  /* ---------- grid modelos ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(206px,1fr));gap:15px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;overflow:hidden;cursor:pointer;transition:transform .13s,border-color .13s;display:flex;flex-direction:column;position:relative}
+  .card:hover{transform:translateY(-3px);border-color:var(--amb)}
+  .card .ph{position:relative;aspect-ratio:4/3;background:var(--panel2);display:grid;place-items:center;overflow:hidden}
+  .card .ph img{width:100%;height:100%;object-fit:cover}
+  .noimg{width:36px;height:36px;stroke:var(--tx3);fill:none;stroke-width:1.4;opacity:.55}
+  .estrella{position:absolute;top:6px;left:6px;z-index:2;background:rgba(20,18,15,.72);border:none;width:29px;height:29px;border-radius:8px;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(3px)}
+  .estrella svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:1.8}
+  .estrella.on svg{fill:var(--amb);stroke:var(--amb)}
+  .badges{position:absolute;top:6px;right:6px;display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;z-index:2}
+  .bdg{font-family:var(--fm);font-size:8.5px;font-weight:700;padding:3px 5px;border-radius:5px}
+  .bdg.lb{background:rgba(232,163,61,.93);color:#14120F}
+  .bdg.man{background:rgba(224,101,79,.93);color:#fff}
+  .bdg.d3{background:rgba(95,168,211,.93);color:#0b2029}
+  .bdg.stk{background:rgba(111,191,115,.93);color:#0d2410}
+  .card .info{padding:10px 11px 11px}
+  .card .nm{font-family:var(--fd);font-size:13.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+  .card .rt{font-family:var(--fm);font-size:9.5px;color:var(--tx3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card .pr{font-family:var(--fd);font-size:13px;color:var(--ok);margin-top:5px}
+
+  .vacio{text-align:center;padding:60px 20px;color:var(--tx3)}
+  .cargando{text-align:center;padding:40px;color:var(--tx3);font-family:var(--fm)}
+
+  /* ---------- tablas ---------- */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);font-weight:600}
+  td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:hover td{background:var(--panel)}
+  .num{text-align:right;font-family:var(--fm);font-variant-numeric:tabular-nums}
+  .chip{display:inline-block;font-family:var(--fm);font-size:10px;padding:3px 8px;border-radius:99px;font-weight:700}
+  .chip.pend{background:#4A3A16;color:var(--amb2)}
+  .chip.cort{background:#1D3A4A;color:#9AD4F5}
+  .chip.entr{background:#1D3D22;color:#A9E5AC}
+  .chip.pag{background:#1D3D22;color:#A9E5AC}
+  .chip.deb{background:#4A2018;color:#FFB3A3}
+  .chip.venc{background:var(--rojo);color:#fff}
+
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:9px 15px;cursor:pointer;font-family:var(--fd);font-size:13.5px;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:var(--amb);color:var(--amb2)}
+  .btn.pri{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
+  .btn.pri:hover{background:var(--amb2);color:#14120F}
+  .btn.del{color:var(--rojo);border-color:#4A2A22}
+  .btn.del:hover{background:var(--rojo);color:#fff}
+  .btn.mini{padding:5px 10px;font-size:12px}
+  .barra{display:flex;gap:9px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+
+  /* ---------- panel métricas ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:13px;margin-bottom:22px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 17px}
+  .kpi .l{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3)}
+  .kpi .v{font-family:var(--fd);font-size:1.7rem;margin-top:3px;font-variant-numeric:tabular-nums}
+  .kpi.ok .v{color:var(--ok)} .kpi.amb .v{color:var(--amb)} .kpi.rojo .v{color:var(--rojo)} .kpi.info .v{color:var(--info)}
+  .caja{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:17px 19px;margin-bottom:16px}
+  .caja h4{font-family:var(--fd);font-size:1.05rem;margin:0 0 13px}
+  .barra-g{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px}
+  .barra-g .et{width:150px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)}
+  .barra-g .bg{flex:1;height:22px;background:var(--panel2);border-radius:5px;overflow:hidden}
+  .barra-g .bf{height:100%;background:linear-gradient(90deg,var(--amb),#B87418);border-radius:5px}
+  .barra-g .vl{width:95px;text-align:right;font-family:var(--fm);font-size:12px;color:var(--tx)}
+
+  /* ---------- modal ---------- */
+  .velo{position:fixed;inset:0;background:rgba(8,7,5,.84);display:none;align-items:center;justify-content:center;padding:22px;z-index:60;backdrop-filter:blur(3px)}
+  .velo.on{display:flex}
+  .caja-m{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:100%;max-width:940px;max-height:91vh;display:flex;flex-direction:column;overflow:hidden}
+  .caja-m.chica{max-width:520px}
+  .mh{display:flex;align-items:flex-start;justify-content:space-between;gap:13px;padding:16px 20px;border-bottom:1px solid var(--line)}
+  .mh h2{font-family:var(--fd);font-size:1.3rem;margin:0;line-height:1.2}
+  .mh .rt{font-family:var(--fm);font-size:10.5px;color:var(--tx3);margin-top:4px;word-break:break-all}
+  .xb{background:none;border:1px solid var(--line);color:var(--tx2);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:19px;flex:none;line-height:1}
+  .xb:hover{border-color:var(--rojo);color:var(--rojo)}
+  .mb{padding:16px 20px 22px;overflow-y:auto}
+  .mf{padding:13px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;background:var(--panel2)}
+  .mtabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);padding:11px 14px;cursor:pointer;font-family:var(--fd);font-size:13.5px}
+  .mtab:hover{color:var(--tx)}
+  .mtab.on{color:var(--amb2);border-bottom-color:var(--amb)}
+  .mpanel{display:none} .mpanel.on{display:block}
+  .cols{display:grid;grid-template-columns:290px 1fr;gap:20px}
+  @media(max-width:820px){ .cols{grid-template-columns:1fr} }
+  .prev{border-radius:12px;overflow:hidden;background:var(--panel2);border:1px solid var(--line);aspect-ratio:4/3;display:grid;place-items:center}
+  .prev img{width:100%;height:100%;object-fit:contain;cursor:zoom-in}
+  .acciones{display:flex;flex-direction:column;gap:8px;margin-top:13px}
+  .acc{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--tx);cursor:pointer;font-size:14px;font-family:var(--fd);text-align:left;width:100%}
+  .acc:hover{border-color:var(--amb);background:var(--panel3)}
+  .acc svg{width:17px;height:17px;flex:none}
+  .acc.pri{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
+  .acc.pri:hover{background:var(--amb2)}
+  .acc small{display:block;font-family:var(--fb);font-weight:400;font-size:11px;color:var(--tx3);margin-top:1px}
+  .acc.pri small{color:rgba(20,18,15,.6)}
+  .secc{margin-bottom:16px}
+  .secc h4{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3);margin:0 0 7px}
+  .arch{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:9px;border:1px solid var(--line);margin-bottom:5px;background:var(--panel2)}
+  .arch .an{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .arch .ax{font-family:var(--fm);font-size:9px;color:var(--tx3);text-transform:uppercase;border:1px solid var(--line);padding:2px 5px;border-radius:4px;flex:none}
+  .arch button{background:var(--amb-dim);border:none;color:var(--amb2);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:600;flex:none;font-family:var(--fd)}
+  .arch button:hover{background:var(--amb);color:#14120F}
+  .arch button.bx{background:none;border:1px solid var(--line);color:var(--tx3);padding:5px 9px}
+  .arch button.bx:hover{background:var(--rojo);border-color:var(--rojo);color:#fff}
+  .dupg{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:13px}
+  .dupg h5{font-family:var(--fd);font-size:1rem;margin:0 0 11px;color:var(--amb2)}
+  .dupi{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;background:var(--panel2)}
+  .dupi .th{width:58px;height:44px;border-radius:7px;object-fit:cover;flex:none;background:var(--bg)}
+  .dupi .dn{flex:1;min-width:0}
+  .dupi .dn b{display:block;font-family:var(--fd);font-size:13.5px}
+  .dupi .dn small{color:var(--tx3);font-family:var(--fm);font-size:10.5px}
+  .dupi .mejor{background:#1D3D22;color:#A9E5AC;font-family:var(--fm);font-size:9.5px;padding:3px 7px;border-radius:99px;font-weight:700}
+  .zona{border:2px dashed var(--line);border-radius:11px;padding:16px;text-align:center;color:var(--tx3);cursor:pointer;font-size:13px;transition:.15s}
+  .zona:hover,.zona.drag{border-color:var(--amb);color:var(--amb2);background:var(--amb-dim)}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--panel3);border:1px solid var(--amb);color:var(--tx);padding:11px 21px;border-radius:99px;font-family:var(--fd);font-size:13.5px;opacity:0;transition:.24s;z-index:90;pointer-events:none;max-width:80vw;text-align:center}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:var(--rojo)}
+  .lupa-full{position:fixed;inset:0;background:rgba(5,4,3,.96);display:none;align-items:center;justify-content:center;z-index:95;cursor:zoom-out;padding:28px}
+  .lupa-full.on{display:flex}
+  .lupa-full img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:#3A332A;border-radius:6px;border:2px solid var(--bg)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="logo">
+    <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/><path d="M18 15l.8 2.4L21 18l-2.2.7L18 21l-.8-2.3L15 18l2.2-.6z"/></svg></div>
+    <div class="t">Biblioteca Láser<small>modelos & taller</small></div>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-v="biblio">Biblioteca</button>
+    <button class="tab" data-v="fav">★ Favoritos <span class="pill" id="pFav">0</span></button>
+    <button class="tab" data-v="clientes">Clientes <span class="pill" id="pCli">0</span></button>
+    <button class="tab" data-v="ventas">Ventas</button>
+    <button class="tab" data-v="panel">Panel</button>
+    <button class="tab" data-v="limpieza">🧹 Limpieza</button>
+    <button class="tab" data-v="ajustes">⚙️</button>
+  </div>
+  <div class="buscador" id="cajaBuscar">
+    <svg class="lupa" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input id="q" type="text" placeholder="Buscar modelo..." autocomplete="off">
+    <button class="x" id="qx">&times;</button>
+  </div>
+  <div class="cuenta" id="cuenta"></div>
+</div>
+
+<div class="cuerpo">
+  <aside class="lado" id="lado">
+    <button class="limpiar-todo arriba" id="limpiarTodo">✕ Quitar todos los filtros</button>
+    <h3>Qué incluye</h3>
+    <div class="fil" id="filFlags">
+      <button class="fb" data-flag="img">Con foto</button>
+      <button class="fb" data-flag="man">Con manual</button>
+      <button class="fb" data-flag="lb">LightBurn</button>
+      <button class="fb" data-flag="d3">3D</button>
+      <button class="fb" data-flag="stock">Con stock</button>
+    </div>
+    <h3>Formato</h3><div class="fil" id="filFmt"></div>
+    <h3>Grosor</h3><div class="fil" id="filGrosor"></div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="cargando" id="cargando">Cargando biblioteca...</div>
+
+    <!-- BIBLIOTECA / FAVORITOS -->
+    <div class="vista on" id="v-biblio">
+      <div class="cats" id="cats"></div>
+      <div class="subs" id="subs"></div>
+      <div class="activos" id="activos"></div>
+      <div class="grid" id="grid"></div>
+      <div class="vacio" id="vacio" style="display:none">No hay modelos con esos filtros.</div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div class="vista" id="v-clientes">
+      <h2 class="tit">Clientes</h2>
+      <p class="sub">Sus datos, lo que te encargaron y lo que falta cobrar.</p>
+      <div class="barra">
+        <button class="btn pri" id="nuevoCliente">+ Nuevo cliente</button>
+        <button class="btn" id="nuevoPedido">+ Nuevo encargo</button>
+        <button class="btn" id="verPendientes">Solo pendientes</button>
+      </div>
+      <div class="caja"><h4>Encargos</h4><div id="tablaPedidos"></div></div>
+      <div class="caja"><h4>Lista de clientes</h4><div id="tablaClientes"></div></div>
+    </div>
+
+    <!-- VENTAS -->
+    <div class="vista" id="v-ventas">
+      <h2 class="tit">Ventas</h2>
+      <p class="sub">Anota lo que vendes en ferias o a clientes. El precio puede cambiar en cada venta.</p>
+      <div class="barra"><button class="btn pri" id="nuevaVenta">+ Registrar venta</button></div>
+      <div class="caja"><h4>Últimas ventas</h4><div id="tablaVentas"></div></div>
+    </div>
+
+    <!-- LIMPIEZA -->
+    <div class="vista" id="v-limpieza">
+      <h2 class="tit">Limpieza</h2>
+      <p class="sub">Encuentra modelos repetidos y recupera lo que borraste.</p>
+      <div class="barra">
+        <button class="btn pri" id="buscarDup">Buscar repetidos</button>
+        <button class="btn" id="verPapelera">Ver papelera</button>
+      </div>
+      <div id="dupCont"></div>
+      <div id="papCont"></div>
+    </div>
+
+    <!-- AJUSTES -->
+    <div class="vista" id="v-ajustes">
+      <h2 class="tit">Ajustes</h2>
+      <p class="sub">Versión, respaldos y carpeta de modelos.</p>
+
+      <div class="caja">
+        <h4>Versión de la app</h4>
+        <p class="sub" id="verTxt">—</p>
+        <div class="barra">
+          <button class="btn pri" id="btnRevisar">Buscar actualizaciones</button>
+        </div>
+        <div id="actCont"></div>
+      </div>
+
+      <div class="caja">
+        <h4>Respaldo de tus datos</h4>
+        <p class="sub">Guarda tus favoritos, nombres y categorías corregidas, precios, clientes y ventas.
+        Sirve para pasarlos a otro computador o para no perderlos.</p>
+        <div class="barra">
+          <button class="btn pri" id="btnExportar">⬇ Descargar respaldo</button>
+          <button class="btn" id="btnImportar">⬆ Cargar respaldo</button>
+          <input type="file" id="fileImportar" accept="application/json" style="display:none">
+        </div>
+        <p class="sub" style="margin:0">Al cargar un respaldo se agrega lo que falte, sin borrar lo que ya tienes.</p>
+      </div>
+
+      <div class="caja">
+        <h4>Carpeta de modelos</h4>
+        <p class="sub" id="rutaTxt">—</p>
+        <div class="barra">
+          <button class="btn" id="btnReindexar">Buscar modelos nuevos</button>
+        </div>
+        <p class="sub" style="margin:0">Para cambiar de carpeta, cierra la app y usa
+        “Cambiar carpeta de modelos.bat”.</p>
+      </div>
+    </div>
+
+    <!-- PANEL -->
+    <div class="vista" id="v-panel">
+      <h2 class="tit">Panel</h2>
+      <p class="sub">Cómo va el negocio.</p>
+      <div id="panelCont"></div>
+    </div>
+  </main>
+</div>
+
+<!-- modal modelo -->
+<div class="velo" id="velo">
+  <div class="caja-m">
+    <div class="mh">
+      <div style="min-width:0"><h2 id="dTit">—</h2><div class="rt" id="dRuta"></div></div>
+      <button class="xb" id="dCerrar">&times;</button>
+    </div>
+    <div class="mtabs" id="mtabs">
+      <button class="mtab on" data-p="archivos">Archivos</button>
+      <button class="mtab" data-p="editar">Editar</button>
+      <button class="mtab" data-p="cargar">Cargar archivos</button>
+      <button class="mtab" data-p="versiones">Historial</button>
+    </div>
+    <div class="mb">
+      <div class="mpanel on" id="p-archivos"><div class="cols"><div><div class="prev" id="dPrev"></div><div class="acciones" id="dAcc"></div></div><div id="dArch"></div></div></div>
+      <div class="mpanel" id="p-editar"></div>
+      <div class="mpanel" id="p-cargar"></div>
+      <div class="mpanel" id="p-versiones"></div>
+    </div>
+    <div class="mf">
+      <button class="btn del" id="dBorrarModelo">🗑 Eliminar este modelo</button>
+      <span style="color:var(--tx3);font-size:12px;align-self:center">Lo borrado va a la papelera, se puede recuperar</span>
+    </div>
+  </div>
+</div>
+
+<!-- modal formulario genérico -->
+<div class="velo" id="velo2">
+  <div class="caja-m chica">
+    <div class="mh"><h2 id="f2Tit">—</h2><button class="xb" id="f2Cerrar">&times;</button></div>
+    <div class="mb" id="f2Body"></div>
+    <div class="mf"><button class="btn del" id="f2Del" style="visibility:hidden">Eliminar</button><button class="btn pri" id="f2Ok">Guardar</button></div>
+  </div>
+</div>
+
+<div class="lupa-full" id="lupaFull"><img id="lupaImg" src="" alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+var D=null, MODELOS=[], CLIENTES=[], PEDIDOS=[], VENTAS=[];
+var filtrados=[], mostrados=0, LOTE=60, actual=null;
+var st={q:"",cat:"",sub:"",flags:{},fmt:"",gr:"",vista:"biblio"};
+var qEl=document.getElementById('q'), grid=document.getElementById('grid');
+
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function norm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')}
+function clp(n){return '$'+Math.round(n||0).toLocaleString('es-CL')}
+function fech(t){ if(!t) return '—'; var d=new Date(t*1000); return d.toLocaleDateString('es-CL'); }
+function hoy(){ return Math.floor(Date.now()/1000); }
+function toast(m,e){var t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(function(){t.className='toast'},2500)}
+function api(u,d){ return fetch(u, d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:undefined).then(function(r){return r.json()}) }
+
+// ---------------- carga ----------------
+function cargar(){
+  return api('/api/datos').then(function(d){
+    D=d; MODELOS=d.modelos; CLIENTES=d.clientes||[];
+    document.getElementById('cargando').style.display='none';
+    filtrosLaterales(); pintarCategorias(); aplicar(); actualizarPills();
+  });
+}
+cargar().catch(function(){document.getElementById('cargando').textContent='Error al cargar.'});
+
+function actualizarPills(){
+  document.getElementById('pFav').textContent=MODELOS.filter(function(m){return m.fav}).length;
+  document.getElementById('pCli').textContent=CLIENTES.length;
+}
+
+function filtrosLaterales(){
+  var fm={},gr={};
+  MODELOS.forEach(function(m){(m.fmt||[]).forEach(function(f){fm[f]=(fm[f]||0)+1});(m.gr||[]).forEach(function(g){gr[g]=(gr[g]||0)+1})});
+  document.getElementById('filFmt').innerHTML=Object.keys(fm).sort(function(a,b){return fm[b]-fm[a]}).slice(0,8).map(function(f){return '<button class="fb" data-fmt="'+esc(f)+'">'+f.toUpperCase()+'</button>'}).join('');
+  document.getElementById('filGrosor').innerHTML=Object.keys(gr).sort(function(a,b){return gr[b]-gr[a]}).slice(0,8).map(function(g){return '<button class="fb" data-gr="'+esc(g)+'">'+esc(g)+'</button>'}).join('');
+}
+
+// ---------------- categorías (2 niveles, sin cascada) ----------------
+var ICONOS={"Vehículos":"🚗","Animales":"🦋","Hogar y muebles":"🪑","Juegos y juguetes":"🧩",
+            "Casas y maquetas":"🏠","Arte y ocasiones":"🎄","Otros":"📦"};
+function pintarCategorias(){
+  var tot=MODELOS.length;
+  var h='<div class="cat-b'+(st.cat?'':' on')+'" data-cat=""><div class="ic">✳️</div><div class="nm">Todos</div><div class="n">'+tot.toLocaleString('es-CL')+'</div></div>';
+  h+=(D.categorias||[]).map(function(c){
+    return '<div class="cat-b'+(st.cat===c.nombre?' on':'')+'" data-cat="'+esc(c.nombre)+'">'
+      +'<div class="ic">'+(ICONOS[c.nombre]||'📁')+'</div><div class="nm">'+esc(c.nombre)+'</div>'
+      +'<div class="n">'+c.n.toLocaleString('es-CL')+'</div></div>';
+  }).join('');
+  document.getElementById('cats').innerHTML=h;
+  pintarSubs();
+}
+function pintarSubs(){
+  var cont=document.getElementById('subs');
+  if(!st.cat){ cont.innerHTML=''; return; }
+  var g=(D.categorias||[]).find(function(c){return c.nombre===st.cat});
+  cont.innerHTML = (g&&g.subs.length)
+    ? g.subs.map(function(s){ return '<button class="sb'+(st.sub===s.nombre?' on':'')+'" data-sub="'+esc(s.nombre)+'">'+esc(s.nombre)+'<span class="n">'+s.n+'</span></button>' }).join('')
+    : '';
+}
+document.getElementById('cats').addEventListener('click',function(e){
+  var b=e.target.closest('[data-cat]'); if(!b) return;
+  var c=b.dataset.cat;
+  if(st.cat===c){ st.cat=''; st.sub=''; } else { st.cat=c; st.sub=''; }
+  pintarCategorias(); aplicar();
+});
+document.getElementById('subs').addEventListener('click',function(e){
+  var b=e.target.closest('[data-sub]'); if(!b) return;
+  st.sub = (st.sub===b.dataset.sub)?'':b.dataset.sub;
+  pintarSubs(); aplicar();
+});
+
+// ---------------- filtros activos (siempre a la vista) ----------------
+var NOMBRES_FLAG={img:'Con foto',man:'Con manual',lb:'LightBurn',d3:'3D',stock:'Con stock'};
+function pintarActivos(){
+  var a=[];
+  if(st.q) a.push(['q','Buscando: "'+st.q+'"']);
+  if(st.cat) a.push(['cat',st.cat]);
+  if(st.sub) a.push(['sub',st.sub]);
+  for(var f in st.flags){ if(st.flags[f]) a.push(['flag:'+f,NOMBRES_FLAG[f]||f]); }
+  if(st.fmt) a.push(['fmt',st.fmt.toUpperCase()]);
+  if(st.gr) a.push(['gr',st.gr]);
+  var cont=document.getElementById('activos');
+  cont.innerHTML = a.length
+    ? a.map(function(x){return '<span class="act">'+esc(x[1])+'<button data-quitar="'+esc(x[0])+'" title="Quitar">×</button></span>'}).join('')
+       + '<button class="act-limpiar" id="limpiarInline">Limpiar todo</button>'
+    : '';
+  var lt=document.getElementById('limpiarTodo');
+  if(lt) lt.classList.toggle('activo', a.length>0);
+}
+document.getElementById('activos').addEventListener('click',function(e){
+  if(e.target.id==='limpiarInline') return limpiarFiltros();
+  var b=e.target.closest('[data-quitar]'); if(!b) return;
+  var k=b.dataset.quitar;
+  if(k==='q'){ st.q=''; qEl.value=''; document.getElementById('qx').className='x'; }
+  else if(k==='cat'){ st.cat=''; st.sub=''; }
+  else if(k==='sub'){ st.sub=''; }
+  else if(k==='fmt'){ st.fmt=''; }
+  else if(k==='gr'){ st.gr=''; }
+  else if(k.indexOf('flag:')===0){ st.flags[k.slice(5)]=false; }
+  sincronizarBotones(); pintarCategorias(); aplicar();
+});
+function sincronizarBotones(){
+  document.querySelectorAll('#filFlags .fb').forEach(function(b){b.classList.toggle('on',!!st.flags[b.dataset.flag])});
+  document.querySelectorAll('#filFmt .fb').forEach(function(b){b.classList.toggle('on',st.fmt===b.dataset.fmt&&!!st.fmt)});
+  document.querySelectorAll('#filGrosor .fb').forEach(function(b){b.classList.toggle('on',st.gr===b.dataset.gr&&!!st.gr)});
+}
+function limpiarFiltros(){
+  st.q='';st.cat='';st.sub='';st.flags={};st.fmt='';st.gr='';
+  qEl.value=''; document.getElementById('qx').className='x';
+  sincronizarBotones(); pintarCategorias(); aplicar();
+}
+
+// ---------------- filtrado ----------------
+function aplicar(){
+  var q=norm(st.q).split(/\s+/).filter(Boolean);
+  filtrados=MODELOS.filter(function(m){
+    if(st.vista==='fav' && !m.fav) return false;
+    if(st.cat && m.c!==st.cat) return false;
+    if(st.sub && m.s!==st.sub) return false;
+    for(var f in st.flags){ if(!st.flags[f]) continue;
+      if(f==='stock'){ if(!(m.stock>0)) return false; } else if(!m[f]) return false; }
+    if(st.fmt && (m.fmt||[]).indexOf(st.fmt)<0) return false;
+    if(st.gr && (m.gr||[]).indexOf(st.gr)<0) return false;
+    if(q.length){ var txt=norm(m.n+' '+m.ruta_partes.join(' ')+' '+(m.notas||''));
+      for(var j=0;j<q.length;j++){ if(txt.indexOf(q[j])<0) return false; } }
+    return true;
+  });
+  mostrados=0; grid.innerHTML='';
+  document.getElementById('vacio').style.display=filtrados.length?'none':'block';
+  document.getElementById('cuenta').innerHTML='<b>'+filtrados.length.toLocaleString('es-CL')+'</b> de '+MODELOS.length.toLocaleString('es-CL');
+  pintarActivos();
+  lote();
+}
+var SINIMG='<svg class="noimg" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>';
+function lote(){
+  var fin=Math.min(mostrados+LOTE,filtrados.length),h='';
+  for(var i=mostrados;i<fin;i++){ var m=filtrados[i];
+    var b=''; if(m.lb)b+='<span class="bdg lb">LBRN</span>'; if(m.man)b+='<span class="bdg man">PDF</span>';
+    if(m.d3)b+='<span class="bdg d3">3D</span>'; if(m.stock>0)b+='<span class="bdg stk">'+m.stock+'</span>';
+    h+='<div class="card" data-rel="'+esc(m.rel)+'">'
+      + '<div class="ph">'+(m.img?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'" onerror="this.style.display=\'none\'">':SINIMG)
+      + '<button class="estrella'+(m.fav?' on':'')+'" data-fav="'+esc(m.rel)+'"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9L6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg></button>'
+      + '<div class="badges">'+b+'</div></div>'
+      + '<div class="info"><div class="nm">'+esc(m.n)+'</div><div class="rt">'+esc(m.ruta_partes.slice(0,2).join(' › '))+'</div>'
+      + (m.precio?'<div class="pr">'+clp(m.precio)+'</div>':'')+'</div></div>';
+  }
+  grid.insertAdjacentHTML('beforeend',h); mostrados=fin;
+}
+document.getElementById('main').addEventListener('scroll',function(){
+  if(this.scrollTop+this.clientHeight>this.scrollHeight-500&&mostrados<filtrados.length) lote();
+});
+
+qEl.addEventListener('input',function(){st.q=qEl.value;document.getElementById('qx').className='x'+(qEl.value?' on':'');clearTimeout(qEl._t);qEl._t=setTimeout(aplicar,170)});
+document.getElementById('qx').addEventListener('click',function(){qEl.value='';st.q='';this.className='x';aplicar()});
+document.getElementById('filFlags').addEventListener('click',function(e){var b=e.target.closest('.fb');if(!b)return;var f=b.dataset.flag;st.flags[f]=!st.flags[f];b.classList.toggle('on',st.flags[f]);aplicar()});
+document.getElementById('filFmt').addEventListener('click',function(e){var b=e.target.closest('.fb');if(!b)return;st.fmt=(st.fmt===b.dataset.fmt)?'':b.dataset.fmt;[].forEach.call(this.children,function(c){c.classList.toggle('on',st.fmt&&c.dataset.fmt===st.fmt)});aplicar()});
+document.getElementById('filGrosor').addEventListener('click',function(e){var b=e.target.closest('.fb');if(!b)return;st.gr=(st.gr===b.dataset.gr)?'':b.dataset.gr;[].forEach.call(this.children,function(c){c.classList.toggle('on',st.gr&&c.dataset.gr===st.gr)});aplicar()});
+document.getElementById('limpiarTodo').addEventListener('click',limpiarFiltros);
+
+// ---------------- pestañas ----------------
+document.getElementById('tabs').addEventListener('click',function(e){
+  var b=e.target.closest('.tab'); if(!b) return;
+  [].forEach.call(this.children,function(c){c.classList.toggle('on',c===b)});
+  st.vista=b.dataset.v;
+  var esLista = (st.vista==='biblio'||st.vista==='fav');
+  document.getElementById('lado').style.display=esLista?'':'none';
+  document.getElementById('cajaBuscar').style.display=esLista?'':'none';
+  document.getElementById('cuenta').style.display=esLista?'':'none';
+  ['biblio','clientes','ventas','panel','limpieza','ajustes'].forEach(function(v){
+    document.getElementById('v-'+v).classList.toggle('on', v===st.vista || (v==='biblio'&&st.vista==='fav'));
+  });
+  if(st.vista==='clientes') verClientes();
+  else if(st.vista==='ventas') verVentas();
+  else if(st.vista==='panel') verPanel();
+  else if(st.vista==='limpieza') verPapelera();
+  else if(st.vista==='ajustes') verAjustes();
+  else aplicar();
+});
+
+// ---------------- favoritos ----------------
+grid.addEventListener('click',function(e){
+  var f=e.target.closest('[data-fav]');
+  if(f){ e.stopPropagation(); var rel=f.dataset.fav;
+    api('/api/favorito',{rel:rel}).then(function(r){
+      var m=MODELOS.find(function(x){return x.rel===rel}); if(m)m.fav=r.favorito;
+      f.classList.toggle('on',!!r.favorito); actualizarPills();
+      if(st.vista==='fav') aplicar();
+    }); return; }
+  var c=e.target.closest('.card'); if(c) abrirModelo(c.dataset.rel);
+});
+
+// ---------------- modal modelo ----------------
+function abrirModelo(rel){
+  api('/api/modelo?rel='+encodeURIComponent(rel)).then(function(m){
+    actual=m; var v=MODELOS.find(function(x){return x.rel===rel})||{};
+    document.getElementById('dTit').textContent=v.n||m.nombre;
+    document.getElementById('dRuta').textContent=m.rel;
+    // preview + acciones
+    var prev=document.getElementById('dPrev');
+    if(m.preview){ var src='/api/archivo?p='+encodeURIComponent(m.ruta+'\\'+m.preview);
+      prev.innerHTML='<img src="'+esc(src)+'">';
+      prev.querySelector('img').onclick=function(){document.getElementById('lupaImg').src=src;document.getElementById('lupaFull').classList.add('on')};
+    } else prev.innerHTML=SINIMG;
+    var corte=m.archivos.corte||[], lb=corte.filter(function(f){return /\.lbrn2?$/i.test(f)});
+    var pri=lb[0]||corte[0], a=[];
+    if(pri) a.push('<button class="acc pri" data-act="lightburn" data-f="'+esc(pri)+'"><svg viewBox="0 0 24 24" fill="#14120F"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>Abrir en LightBurn<small>'+esc(pri)+'</small></span></button>');
+    if((m.archivos.manual||[]).length) a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.archivos.manual[0])+'"><svg viewBox="0 0 24 24" fill="none" stroke="#E0654F" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/></svg><span>Ver manual<small>'+esc(m.archivos.manual[0])+'</small></span></button>');
+    if(m.preview) a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.preview)+'"><svg viewBox="0 0 24 24" fill="none" stroke="#5FA8D3" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/></svg><span>Ver imagen</span></button>');
+    a.push('<button class="acc" data-act="carpeta"><svg viewBox="0 0 24 24" fill="none" stroke="#E8A33D" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"/></svg><span>Abrir carpeta</span></button>');
+    document.getElementById('dAcc').innerHTML=a.join('');
+    // archivos
+    var g=[['corte','Para cortar'],['manual','Manuales'],['imagen','Imágenes'],['3d','3D'],['video','Videos'],['otro','Comprimidos']],h='';
+    g.forEach(function(p){var arr=m.archivos[p[0]]||[];if(!arr.length)return;
+      h+='<div class="secc"><h4>'+p[1]+' ('+arr.length+')</h4>';
+      arr.slice(0,40).forEach(function(f){var ext=(f.split('.').pop()||'').toLowerCase(),cc=p[0]==='corte';
+        h+='<div class="arch"><span class="ax">'+esc(ext)+'</span><span class="an">'+esc(f)+'</span>'
+          +'<button data-act="'+(cc?'lightburn':'abrir')+'" data-f="'+esc(f)+'">'+(cc?'Cortar':'Abrir')+'</button>'
+          +'<button class="bx" data-borrar="'+esc(f)+'" title="Enviar a la papelera">🗑</button></div>'});
+      h+='</div>'});
+    document.getElementById('dArch').innerHTML=h;
+    panelEditar(m,v); panelCargar(m); panelVersiones(m);
+    document.querySelector('.mtab[data-p="archivos"]').click();
+    document.getElementById('velo').classList.add('on');
+  });
+}
+document.getElementById('mtabs').addEventListener('click',function(e){
+  var b=e.target.closest('.mtab'); if(!b) return;
+  [].forEach.call(this.children,function(c){c.classList.toggle('on',c===b)});
+  ['archivos','editar','cargar','versiones'].forEach(function(p){document.getElementById('p-'+p).classList.toggle('on',p===b.dataset.p)});
+});
+document.getElementById('dCerrar').addEventListener('click',function(){document.getElementById('velo').classList.remove('on')});
+document.getElementById('dBorrarModelo').addEventListener('click',function(){
+  if(!actual) return;
+  var nom=document.getElementById('dTit').textContent;
+  if(!confirm('¿Eliminar el modelo "'+nom+'" completo?\n\nSe manda toda la carpeta a la papelera y podrás recuperarla desde Limpieza → Papelera.')) return;
+  api('/api/borrar-modelo',{rel:actual.rel}).then(function(r){
+    if(r.ok){ toast('Modelo enviado a la papelera'); document.getElementById('velo').classList.remove('on');
+      cargar().then(function(){aplicar()}); }
+    else toast(r.error||'No se pudo',true);
+  });
+});
+
+// ---------------- limpieza: duplicados + papelera ----------------
+document.getElementById('buscarDup').onclick=function(){
+  var c=document.getElementById('dupCont');
+  c.innerHTML='<div class="caja"><p class="sub">Revisando los archivos para encontrar repetidos... esto puede tardar un poco.</p></div>';
+  api('/api/duplicados').then(function(r){
+    var g=r.grupos||[];
+    if(!g.length){ c.innerHTML='<div class="caja"><h4>Repetidos</h4><p class="sub">No encontré modelos repetidos. 👌</p></div>'; return; }
+    DUP=g; DUP_MOSTRADOS=0;
+    var tot=g.reduce(function(a,x){return a+x.length-1},0);
+    c.innerHTML='<div class="caja"><h4>'+g.length+' grupos de repetidos ('+tot+' modelos de más)</h4>'
+      +'<p class="sub">Marcados con “más completo” los que tienen más archivos. Revisa y borra el que no quieras: va a la papelera.</p>'
+      +'<div id="dupLista"></div><div style="text-align:center;margin-top:12px"><button class="btn" id="dupMas">Mostrar más</button></div></div>';
+    pintarDupLote();
+  }).catch(function(){c.innerHTML='<div class="caja"><p class="sub">No se pudo revisar.</p></div>'});
+};
+var DUP=[], DUP_MOSTRADOS=0, DUP_LOTE=25;
+function pintarDupLote(){
+    var g=DUP, fin=Math.min(DUP_MOSTRADOS+DUP_LOTE,g.length);
+    var h=g.slice(DUP_MOSTRADOS,fin).map(function(gr,k){
+        var i=DUP_MOSTRADOS+k;
+        return '<div class="dupg"><h5>Repetido '+(i+1)+' — '+gr.length+' copias</h5>'
+          + gr.map(function(m,j){
+            return '<div class="dupi">'
+              +(m.img?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'">':'<div class="th"></div>')
+              +'<div class="dn"><b>'+esc(m.nombre)+(j===0?' <span class="mejor">más completo</span>':'')+'</b>'
+              +'<small>'+esc(m.ruta)+' · '+m.n_corte+' archivos · '+m.mb+' MB'+(m.fav?' · ★':'')+'</small></div>'
+              +'<button class="btn mini" data-verdup="'+esc(m.rel)+'">Ver</button>'
+              +'<button class="btn mini del" data-deldup="'+esc(m.rel)+'">Borrar</button></div>';
+          }).join('')+'</div>';
+      }).join('');
+    document.getElementById('dupLista').insertAdjacentHTML('beforeend',h);
+    DUP_MOSTRADOS=fin;
+    var b=document.getElementById('dupMas');
+    if(b){ b.textContent='Mostrar más ('+(g.length-fin)+' grupos restantes)';
+           b.style.display = fin>=g.length ? 'none' : ''; }
+}
+document.getElementById('verPapelera').onclick=function(){ verPapelera(); };
+function verPapelera(){
+  api('/api/papelera').then(function(r){
+    var it=r.items||[];
+    document.getElementById('papCont').innerHTML='<div class="caja"><h4>Papelera ('+it.length+')</h4>'
+      +(it.length?'<table><tr><th>Qué</th><th>Tipo</th><th>Cuándo</th><th></th></tr>'
+        +it.map(function(x){return '<tr><td><b>'+esc(x.nombre)+'</b><br><small style="color:var(--tx3)">'+esc(x.rel||'')+'</small></td>'
+          +'<td>'+(x.tipo==='modelo'?'modelo completo':'archivo')+'</td><td>'+fech(x.fecha)+'</td>'
+          +'<td><button class="btn mini" data-restaurar="'+x.id+'">Recuperar</button></td></tr>'}).join('')
+        +'</table><div class="barra" style="margin-top:14px"><button class="btn del" id="vaciarPap">Vaciar papelera definitivamente</button></div>'
+       : '<p class="sub">La papelera está vacía.</p>')+'</div>';
+  });
+}
+document.getElementById('v-limpieza').addEventListener('click',function(e){
+  if(e.target.id==='dupMas') return pintarDupLote();
+  var v=e.target.closest('[data-verdup]'); if(v) return abrirModelo(v.dataset.verdup);
+  var d=e.target.closest('[data-deldup]');
+  if(d){
+    if(!confirm('¿Enviar este modelo a la papelera?\n\nPodrás recuperarlo después.')) return;
+    api('/api/borrar-modelo',{rel:d.dataset.deldup}).then(function(r){
+      if(r.ok){ toast('Enviado a la papelera'); d.closest('.dupi').style.opacity=.35; d.disabled=true;
+        cargar(); verPapelera(); } else toast(r.error||'No se pudo',true) });
+    return;
+  }
+  var re=e.target.closest('[data-restaurar]');
+  if(re){ api('/api/papelera/restaurar',{id:+re.dataset.restaurar}).then(function(r){
+      if(r.ok){ toast('Recuperado'); verPapelera(); if(r.tipo==='modelo') api('/api/reindexar').then(function(){cargar()}); else cargar(); }
+      else toast(r.error||'No se pudo',true) }); return; }
+  if(e.target.id==='vaciarPap'){
+    if(!confirm('¿Vaciar la papelera?\n\nEsto SÍ borra los archivos para siempre y no se puede deshacer.')) return;
+    api('/api/papelera/vaciar',{}).then(function(r){ toast('Papelera vaciada'); verPapelera(); });
+  }
+});
+document.getElementById('velo').addEventListener('click',function(e){
+  if(e.target===this){this.classList.remove('on');return}
+  // borrar un archivo
+  var bb=e.target.closest('[data-borrar]');
+  if(bb&&actual){
+    var f=bb.dataset.borrar;
+    if(!confirm('¿Enviar "'+f+'" a la papelera?\n\nPodrás recuperarlo desde Limpieza → Papelera.')) return;
+    api('/api/borrar-archivo',{rel:actual.rel,nombre:f}).then(function(r){
+      if(r.ok){toast('Enviado a la papelera');abrirModelo(actual.rel);cargar()} else toast(r.error||'No se pudo',true)});
+    return;
+  }
+  var b=e.target.closest('[data-act]'); if(!b||!actual) return;
+  var act=b.dataset.act, f=b.dataset.f, p=f?(actual.ruta+'\\'+f):actual.ruta;
+  var u = act==='carpeta' ? '/api/carpeta?p='+encodeURIComponent(actual.ruta)
+        : '/api/abrir?p='+encodeURIComponent(p)+'&modo='+(act==='lightburn'?'lightburn':'auto');
+  api(u).then(function(r){ toast(r.ok?(act==='carpeta'?'Carpeta abierta':'Abriendo...'):(r.error||'No se pudo'), !r.ok) });
+});
+
+// -------- editar --------
+function panelEditar(m,v){
+  var opc=CLIENTES.map(function(c){return '<option value="'+c.id+'"'+((v.cliente_id==c.id)?' selected':'')+'>'+esc(c.nombre)+'</option>'}).join('');
+  var cats=(D.categorias||[]).map(function(c){return '<option'+(v.c===c.nombre?' selected':'')+'>'+esc(c.nombre)+'</option>'}).join('');
+  document.getElementById('p-editar').innerHTML=
+    '<div class="campo"><label class="lb">Nombre</label><input id="e_nombre" value="'+esc(v.n||m.nombre)+'"></div>'
+    +'<div class="fila2"><div class="campo"><label class="lb">Categoría</label><select id="e_cat">'+cats+'</select></div>'
+    +'<div class="campo"><label class="lb">Subcategoría</label><select id="e_sub"></select></div></div>'
+    +'<div class="fila3"><div class="campo"><label class="lb">Costo</label><input id="e_costo" type="number" min="0" value="'+(v.costo||'')+'"></div>'
+    +'<div class="campo"><label class="lb">Precio venta</label><input id="e_precio" type="number" min="0" value="'+(v.precio||'')+'"></div>'
+    +'<div class="campo"><label class="lb">Stock (feria)</label><input id="e_stock" type="number" min="0" value="'+(v.stock||0)+'"></div></div>'
+    +'<div class="campo"><label class="lb">Cliente (si es un modelo hecho a pedido)</label><select id="e_cli"><option value="">— ninguno —</option>'+opc+'</select></div>'
+    +'<div class="campo"><label class="lb">Notas</label><textarea id="e_notas">'+esc(v.notas||'')+'</textarea></div>'
+    +'<button class="btn pri" id="e_guardar">Guardar cambios</button>'
+    +'<p class="sub" style="margin-top:12px">Esto se guarda solo en la app: tus carpetas y archivos no se tocan.</p>';
+  // subcategorías según la categoría elegida
+  function llenarSubs(sel){
+    var g=(D.categorias||[]).find(function(c){return c.nombre===document.getElementById('e_cat').value});
+    var lista=(g?g.subs.map(function(s){return s.nombre}):[]);
+    if(sel && lista.indexOf(sel)<0) lista=lista.concat([sel]);
+    document.getElementById('e_sub').innerHTML=lista.map(function(s){
+      return '<option'+(s===sel?' selected':'')+'>'+esc(s)+'</option>'}).join('') || '<option value="">—</option>';
+  }
+  llenarSubs(v.s||'');
+  document.getElementById('e_cat').onchange=function(){ llenarSubs(''); };
+  document.getElementById('e_guardar').onclick=function(){
+    var d={rel:m.rel,nombre:val('e_nombre'),categoria:val('e_cat'),subcategoria:val('e_sub'),
+      costo:numv('e_costo'),precio:numv('e_precio'),stock:numv('e_stock')||0,
+      cliente_id:val('e_cli')||null,notas:val('e_notas')};
+    api('/api/meta',d).then(function(){ toast('Guardado'); cargar().then(function(){ aplicar(); }); });
+  };
+}
+function val(id){var e=document.getElementById(id);return e?e.value.trim():''}
+function numv(id){var v=val(id);return v===''?null:parseFloat(v)}
+
+// -------- cargar archivos --------
+function panelCargar(m){
+  var tipos=[['modelo','Modelo para cortar','.dxf,.svg,.eps,.cdr,.ai,.lbrn,.lbrn2,.plt,.dwg'],
+             ['imagen','Imagen / foto','.jpg,.jpeg,.png,.bmp,.webp'],
+             ['manual','Manual (PDF)','.pdf']];
+  document.getElementById('p-cargar').innerHTML=tipos.map(function(t){
+    return '<div class="secc"><h4>'+t[1]+'</h4>'
+      + '<div class="zona" data-tipo="'+t[0]+'">Haz clic o arrastra el archivo aquí<br><small style="color:var(--tx3)">'+t[2]+'</small></div>'
+      + '<input type="file" style="display:none" data-inp="'+t[0]+'" accept="'+t[2]+'"></div>';
+  }).join('')+'<p class="sub">Si el archivo ya existía, se guarda el anterior en el historial (hasta 3 versiones) y puedes volver atrás.</p>';
+  var cont=document.getElementById('p-cargar');
+  cont.querySelectorAll('.zona').forEach(function(z){
+    var inp=cont.querySelector('[data-inp="'+z.dataset.tipo+'"]');
+    z.onclick=function(){inp.click()};
+    z.ondragover=function(e){e.preventDefault();z.classList.add('drag')};
+    z.ondragleave=function(){z.classList.remove('drag')};
+    z.ondrop=function(e){e.preventDefault();z.classList.remove('drag');if(e.dataTransfer.files[0])subir(z.dataset.tipo,e.dataTransfer.files[0])};
+    inp.onchange=function(){if(inp.files[0])subir(z.dataset.tipo,inp.files[0])};
+  });
+}
+function subir(tipo,file){
+  toast('Subiendo '+file.name+'...');
+  fetch('/api/subir?rel='+encodeURIComponent(actual.rel)+'&tipo='+tipo+'&nombre='+encodeURIComponent(file.name),
+    {method:'POST',body:file}).then(function(r){return r.json()}).then(function(r){
+      if(r.ok){ toast('Archivo guardado'); abrirModelo(actual.rel); cargar(); }
+      else toast(r.error||'No se pudo subir',true);
+    }).catch(function(){toast('Error al subir',true)});
+}
+
+// -------- versiones --------
+function panelVersiones(m){
+  var v=m.versiones||[];
+  document.getElementById('p-versiones').innerHTML = v.length
+    ? v.map(function(x){ return '<div class="arch"><span class="ax">'+esc(x.tipo)+'</span>'
+        + '<span class="an">'+esc(x.archivo)+' <small style="color:var(--tx3)">— guardado '+fech(x.fecha)+'</small></span>'
+        + '<button data-ver="'+x.id+'">Volver a esta</button></div>' }).join('')
+      + '<p class="sub" style="margin-top:10px">Se guardan las últimas 3 versiones de cada archivo, dentro de la carpeta del modelo.</p>'
+    : '<p class="sub">Todavía no hay versiones anteriores. Aparecerán cuando reemplaces un archivo.</p>';
+  document.getElementById('p-versiones').querySelectorAll('[data-ver]').forEach(function(b){
+    b.onclick=function(){ if(!confirm('¿Volver a esta versión? La actual se guarda en el historial.'))return;
+      api('/api/restaurar',{rel:actual.rel,id:+b.dataset.ver}).then(function(r){
+        if(r.ok){toast('Versión restaurada');abrirModelo(actual.rel)} else toast(r.error||'No se pudo',true)}) };
+  });
+}
+
+// ---------------- clientes / pedidos ----------------
+function verClientes(){
+  Promise.all([api('/api/clientes'),api('/api/pedidos')]).then(function(r){
+    CLIENTES=r[0].clientes; PEDIDOS=r[1].pedidos; actualizarPills();
+    pintarClientes(); pintarPedidos();
+  });
+}
+function pintarClientes(){
+  document.getElementById('tablaClientes').innerHTML = CLIENTES.length
+   ? '<table><tr><th>Cliente</th><th>Teléfono</th><th class="num">Encargos</th><th class="num">Por cobrar</th><th></th></tr>'
+     + CLIENTES.map(function(c){return '<tr><td><b>'+esc(c.nombre)+'</b>'+(c.notas?'<br><small style="color:var(--tx3)">'+esc(c.notas)+'</small>':'')+'</td>'
+       + '<td>'+esc(c.telefono||'—')+'</td><td class="num">'+c.n_pedidos+'</td>'
+       + '<td class="num">'+(c.por_cobrar>0?'<span style="color:var(--rojo)">'+clp(c.por_cobrar)+'</span>':'—')+'</td>'
+       + '<td><button class="btn mini" data-cli="'+c.id+'">Editar</button></td></tr>'}).join('')+'</table>'
+   : '<p class="sub">Aún no hay clientes. Usa "+ Nuevo cliente".</p>';
+}
+var soloPend=false;
+function pintarPedidos(){
+  var lista=soloPend?PEDIDOS.filter(function(p){return p.estado!=='entregado'||!p.pagado}):PEDIDOS;
+  document.getElementById('tablaPedidos').innerHTML = lista.length
+   ? '<table><tr><th>Encargo</th><th>Cliente</th><th>Estado</th><th>Vence</th><th class="num">Precio</th><th>Cobro</th><th></th></tr>'
+     + lista.map(function(p){
+        var venc = p.fecha_vence && !p.pagado && p.fecha_vence < hoy();
+        return '<tr><td><b>'+esc(p.descripcion||'—')+'</b>'+(p.cantidad>1?' <small style="color:var(--tx3)">x'+p.cantidad+'</small>':'')+'</td>'
+        +'<td>'+esc(p.cliente||'—')+'</td>'
+        +'<td><span class="chip '+(p.estado==='entregado'?'entr':p.estado==='cortado'?'cort':'pend')+'">'+esc(p.estado)+'</span></td>'
+        +'<td>'+(venc?'<span class="chip venc">venció '+fech(p.fecha_vence)+'</span>':fech(p.fecha_vence))+'</td>'
+        +'<td class="num">'+clp(p.precio)+'</td>'
+        +'<td>'+(p.pagado?'<span class="chip pag">pagado</span>':'<span class="chip deb">debe '+clp((p.precio||0)-(p.abonado||0))+'</span>')+'</td>'
+        +'<td><button class="btn mini" data-ped="'+p.id+'">Editar</button></td></tr>'}).join('')+'</table>'
+   : '<p class="sub">No hay encargos registrados.</p>';
+}
+document.getElementById('v-clientes').addEventListener('click',function(e){
+  var c=e.target.closest('[data-cli]'); if(c) return formCliente(CLIENTES.find(function(x){return x.id==c.dataset.cli}));
+  var p=e.target.closest('[data-ped]'); if(p) return formPedido(PEDIDOS.find(function(x){return x.id==p.dataset.ped}));
+});
+document.getElementById('nuevoCliente').onclick=function(){formCliente(null)};
+document.getElementById('nuevoPedido').onclick=function(){formPedido(null)};
+document.getElementById('verPendientes').onclick=function(){soloPend=!soloPend;this.classList.toggle('pri',soloPend);pintarPedidos()};
+
+// ---------------- ventas ----------------
+function verVentas(){ api('/api/ventas').then(function(r){VENTAS=r.ventas;pintarVentas()}) }
+function pintarVentas(){
+  document.getElementById('tablaVentas').innerHTML = VENTAS.length
+   ? '<table><tr><th>Fecha</th><th>Producto</th><th>Dónde</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Costo</th><th class="num">Ganancia</th><th></th></tr>'
+     + VENTAS.map(function(v){var g=((v.precio_unit||0)-(v.costo_unit||0))*(v.cantidad||1);
+       return '<tr><td>'+fech(v.fecha)+'</td><td><b>'+esc(v.item||v.rel||'—')+'</b></td>'
+       +'<td>'+esc(v.evento||v.canal||'—')+'</td><td class="num">'+(v.cantidad||1)+'</td>'
+       +'<td class="num">'+clp(v.precio_unit)+'</td><td class="num">'+clp(v.costo_unit)+'</td>'
+       +'<td class="num" style="color:'+(g>=0?'var(--ok)':'var(--rojo)')+'">'+clp(g)+'</td>'
+       +'<td><button class="btn mini" data-ven="'+v.id+'">Editar</button></td></tr>'}).join('')+'</table>'
+   : '<p class="sub">Aún no registras ventas.</p>';
+}
+document.getElementById('v-ventas').addEventListener('click',function(e){
+  var v=e.target.closest('[data-ven]'); if(v) formVenta(VENTAS.find(function(x){return x.id==v.dataset.ven}));
+});
+document.getElementById('nuevaVenta').onclick=function(){formVenta(null)};
+
+// ---------------- panel ----------------
+function verPanel(){
+  api('/api/metricas').then(function(k){
+    var gan=(k.total.venta||0)-(k.total.costo||0), ganMes=(k.mes.venta||0)-(k.mes.costo||0);
+    var h='<div class="kpis">'
+      +kpi('Vendido (30 días)',clp(k.mes.venta),'ok')
+      +kpi('Ganancia (30 días)',clp(ganMes),'amb')
+      +kpi('Vendido total',clp(k.total.venta),'')
+      +kpi('Ganancia total',clp(gan),'ok')
+      +kpi('Por cobrar',clp(k.por_cobrar.t),(k.por_cobrar.t>0?'rojo':''))
+      +kpi('Encargos vencidos',k.vencidos.n||0,(k.vencidos.n>0?'rojo':''))
+      +kpi('Favoritos',k.n_favoritos,'info')
+      +kpi('Clientes',k.n_clientes,'info')
+      +'</div>';
+    if(k.top&&k.top.length){
+      var max=Math.max.apply(null,k.top.map(function(t){return t.total||0}))||1;
+      h+='<div class="caja"><h4>Lo que más vendes</h4>'+k.top.map(function(t){
+        return '<div class="barra-g"><div class="et">'+esc(t.item||'—')+'</div><div class="bg"><div class="bf" style="width:'+Math.max(3,(t.total/max*100))+'%"></div></div><div class="vl">'+clp(t.total)+'</div></div>'
+      }).join('')+'</div>';
+    }
+    if(k.por_mes&&k.por_mes.length){
+      var mx=Math.max.apply(null,k.por_mes.map(function(m){return m.total||0}))||1;
+      h+='<div class="caja"><h4>Ventas por mes</h4>'+k.por_mes.map(function(m){
+        return '<div class="barra-g"><div class="et">'+esc(m.mes)+'</div><div class="bg"><div class="bf" style="width:'+Math.max(3,(m.total/mx*100))+'%"></div></div><div class="vl">'+clp(m.total)+'</div></div>'
+      }).join('')+'</div>';
+    }
+    if(k.por_canal&&k.por_canal.length){
+      h+='<div class="caja"><h4>Por dónde vendes</h4><table><tr><th>Canal</th><th class="num">Ventas</th><th class="num">Total</th></tr>'
+        +k.por_canal.map(function(c){return '<tr><td>'+esc(c.canal||'—')+'</td><td class="num">'+c.n+'</td><td class="num">'+clp(c.total)+'</td></tr>'}).join('')+'</table></div>';
+    }
+    if(!k.total.n) h+='<p class="sub">Cuando registres ventas, acá aparecen tus métricas.</p>';
+    document.getElementById('panelCont').innerHTML=h;
+  });
+}
+function kpi(l,v,c){return '<div class="kpi '+(c||'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div></div>'}
+
+// ---------------- ajustes ----------------
+function verAjustes(){
+  api('/api/version').then(function(v){
+    document.getElementById('verTxt').innerHTML='Tienes la versión <b style="color:var(--amb2)">'+esc(v.version)+'</b>';
+  });
+  document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
+    +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
+}
+document.getElementById('btnRevisar').onclick=function(){
+  var c=document.getElementById('actCont');
+  c.innerHTML='<p class="sub">Revisando...</p>';
+  api('/api/actualizacion/revisar').then(function(r){
+    if(r.error){ c.innerHTML='<p class="sub" style="color:var(--rojo)">'+esc(r.error)+'</p>'
+      +'<p class="sub">Si no hay internet, pídele a Ruperto el ZIP nuevo y descomprímelo encima de esta carpeta.</p>'; return; }
+    if(!r.hay_nueva){ c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Estás al día (versión '+esc(r.actual)+').</p>'; return; }
+    c.innerHTML='<div class="caja" style="border-color:var(--amb)"><h4>¡Hay una versión nueva: '+esc(r.disponible)+'!</h4>'
+      +(r.novedades?'<p class="sub">'+esc(r.novedades)+'</p>':'')
+      +'<button class="btn pri" id="btnAplicar">Actualizar ahora</button></div>';
+    document.getElementById('btnAplicar').onclick=function(){
+      this.textContent='Actualizando...'; this.disabled=true;
+      api('/api/actualizacion/aplicar',{zip:r.zip}).then(function(x){
+        if(x.ok) c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo. '+esc(x.aviso)+'</p>';
+        else c.innerHTML='<p class="sub" style="color:var(--rojo)">'+esc(x.error||'No se pudo')+'</p>';
+      });
+    };
+  });
+};
+document.getElementById('btnExportar').onclick=function(){ window.location='/api/datos/exportar'; toast('Descargando respaldo...') };
+document.getElementById('btnImportar').onclick=function(){ document.getElementById('fileImportar').click() };
+document.getElementById('fileImportar').onchange=function(){
+  var f=this.files[0]; if(!f) return;
+  var lector=new FileReader();
+  lector.onload=function(){
+    var datos; try{ datos=JSON.parse(lector.result) }catch(e){ return toast('El archivo no es un respaldo válido',true) }
+    api('/api/datos/importar',{datos:datos,modo:'fusionar'}).then(function(r){
+      if(r.ok){ var n=r.importado; toast('Cargado: '+n.modelos+' modelos, '+n.clientes+' clientes, '+n.ventas+' ventas');
+        cargar().then(function(){aplicar()}); }
+      else toast(r.error||'No se pudo cargar',true);
+    });
+  };
+  lector.readAsText(f); this.value='';
+};
+document.getElementById('btnReindexar').onclick=function(){
+  var b=this; b.textContent='Buscando...'; b.disabled=true;
+  api('/api/reindexar',{}).then(function(r){
+    b.textContent='Buscar modelos nuevos'; b.disabled=false;
+    if(r.ok){ toast('Listo: '+r.total.toLocaleString('es-CL')+' modelos'); cargar().then(function(){verAjustes()}); }
+    else toast(r.error||'No se pudo',true);
+  });
+};
+
+// ---------------- formularios (modal 2) ----------------
+var f2={};
+function abrirF2(tit,html,onOk,onDel){
+  document.getElementById('f2Tit').textContent=tit;
+  document.getElementById('f2Body').innerHTML=html;
+  document.getElementById('f2Del').style.visibility=onDel?'visible':'hidden';
+  f2={ok:onOk,del:onDel};
+  document.getElementById('velo2').classList.add('on');
+}
+document.getElementById('f2Cerrar').onclick=function(){document.getElementById('velo2').classList.remove('on')};
+document.getElementById('velo2').addEventListener('click',function(e){if(e.target===this)this.classList.remove('on')});
+document.getElementById('f2Ok').onclick=function(){ if(f2.ok) f2.ok() };
+document.getElementById('f2Del').onclick=function(){ if(f2.del&&confirm('¿Eliminar?')) f2.del() };
+function cerrarF2(){document.getElementById('velo2').classList.remove('on')}
+
+function formCliente(c){
+  c=c||{};
+  abrirF2(c.id?'Editar cliente':'Nuevo cliente',
+    '<div class="campo"><label class="lb">Nombre</label><input id="c_nom" value="'+esc(c.nombre||'')+'"></div>'
+   +'<div class="fila2"><div class="campo"><label class="lb">Teléfono / WhatsApp</label><input id="c_tel" value="'+esc(c.telefono||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Correo</label><input id="c_mail" value="'+esc(c.email||'')+'"></div></div>'
+   +'<div class="campo"><label class="lb">Notas</label><textarea id="c_not">'+esc(c.notas||'')+'</textarea></div>',
+    function(){ if(!val('c_nom'))return toast('Escribe el nombre',true);
+      api('/api/cliente',{id:c.id,nombre:val('c_nom'),telefono:val('c_tel'),email:val('c_mail'),notas:val('c_not')})
+        .then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();cerrarF2();toast('Cliente guardado')}) },
+    c.id?function(){api('/api/cliente/borrar',{id:c.id}).then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();cerrarF2();toast('Cliente eliminado')})}:null);
+}
+
+function formPedido(p){
+  p=p||{};
+  var opc=CLIENTES.map(function(c){return '<option value="'+c.id+'"'+(p.cliente_id==c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'}).join('');
+  var est=['pendiente','cortado','entregado'].map(function(e){return '<option'+(p.estado===e?' selected':'')+'>'+e+'</option>'}).join('');
+  abrirF2(p.id?'Editar encargo':'Nuevo encargo',
+    '<div class="campo"><label class="lb">Qué le encargaron</label><input id="p_desc" value="'+esc(p.descripcion||'')+'"></div>'
+   +'<div class="fila2"><div class="campo"><label class="lb">Cliente</label><select id="p_cli"><option value="">— sin cliente —</option>'+opc+'</select></div>'
+   +'<div class="campo"><label class="lb">Estado</label><select id="p_est">'+est+'</select></div></div>'
+   +'<div class="fila3"><div class="campo"><label class="lb">Cantidad</label><input id="p_cant" type="number" min="1" value="'+(p.cantidad||1)+'"></div>'
+   +'<div class="campo"><label class="lb">Precio total</label><input id="p_pre" type="number" min="0" value="'+(p.precio||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Abonado</label><input id="p_abo" type="number" min="0" value="'+(p.abonado||'')+'"></div></div>'
+   +'<div class="fila2"><div class="campo"><label class="lb">Fecha de entrega / vencimiento</label><input id="p_ven" type="date" value="'+(p.fecha_vence?new Date(p.fecha_vence*1000).toISOString().slice(0,10):'')+'"></div>'
+   +'<div class="campo"><label class="lb">¿Pagado?</label><select id="p_pag"><option value="0"'+(!p.pagado?' selected':'')+'>No</option><option value="1"'+(p.pagado?' selected':'')+'>Sí</option></select></div></div>'
+   +'<div class="campo"><label class="lb">Notas</label><textarea id="p_not">'+esc(p.notas||'')+'</textarea></div>',
+    function(){
+      var f=val('p_ven'); var ts=f?Math.floor(new Date(f+'T12:00:00').getTime()/1000):null;
+      var pagado=+val('p_pag');
+      api('/api/pedido',{id:p.id,cliente_id:val('p_cli')||null,descripcion:val('p_desc'),
+        cantidad:numv('p_cant')||1,precio:numv('p_pre'),abonado:numv('p_abo')||0,
+        estado:val('p_est'),pagado:pagado,fecha_vence:ts,fecha_pedido:p.fecha_pedido||hoy(),
+        fecha_pago:pagado?(p.fecha_pago||hoy()):null,notas:val('p_not'),rel:p.rel||null})
+        .then(function(r){PEDIDOS=r.pedidos;pintarPedidos();verClientes();cerrarF2();toast('Encargo guardado')}) },
+    p.id?function(){api('/api/pedido/borrar',{id:p.id}).then(function(r){PEDIDOS=r.pedidos;pintarPedidos();cerrarF2();toast('Encargo eliminado')})}:null);
+}
+
+function formVenta(v){
+  v=v||{};
+  var opc=CLIENTES.map(function(c){return '<option value="'+c.id+'"'+(v.cliente_id==c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'}).join('');
+  var can=['feria','cliente','local','otro'].map(function(x){return '<option'+(v.canal===x?' selected':'')+'>'+x+'</option>'}).join('');
+  abrirF2(v.id?'Editar venta':'Registrar venta',
+    '<div class="campo"><label class="lb">Qué vendiste</label><input id="v_item" list="lst_modelos" value="'+esc(v.item||'')+'" placeholder="escribe o elige un modelo"><datalist id="lst_modelos">'
+      + MODELOS.slice(0,600).map(function(m){return '<option value="'+esc(m.n)+'">'}).join('')+'</datalist></div>'
+   +'<div class="fila3"><div class="campo"><label class="lb">Cantidad</label><input id="v_cant" type="number" min="1" value="'+(v.cantidad||1)+'"></div>'
+   +'<div class="campo"><label class="lb">Precio c/u</label><input id="v_pre" type="number" min="0" value="'+(v.precio_unit||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Costo c/u</label><input id="v_cos" type="number" min="0" value="'+(v.costo_unit||'')+'"></div></div>'
+   +'<div class="fila3"><div class="campo"><label class="lb">Dónde</label><select id="v_can">'+can+'</select></div>'
+   +'<div class="campo"><label class="lb">Feria / evento</label><input id="v_ev" value="'+esc(v.evento||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Fecha</label><input id="v_fec" type="date" value="'+(v.fecha?new Date(v.fecha*1000).toISOString().slice(0,10):new Date().toISOString().slice(0,10))+'"></div></div>'
+   +'<div class="campo"><label class="lb">Cliente (opcional)</label><select id="v_cli"><option value="">— ninguno —</option>'+opc+'</select></div>'
+   +'<div class="campo"><label class="lb">Notas</label><textarea id="v_not">'+esc(v.notas||'')+'</textarea></div>',
+    function(){
+      if(!val('v_item'))return toast('Escribe qué vendiste',true);
+      var f=val('v_fec'); var ts=f?Math.floor(new Date(f+'T12:00:00').getTime()/1000):hoy();
+      var rel=null; var mm=MODELOS.find(function(m){return m.n===val('v_item')}); if(mm)rel=mm.rel;
+      api('/api/venta',{id:v.id,fecha:ts,rel:v.rel||rel,item:val('v_item'),cantidad:numv('v_cant')||1,
+        precio_unit:numv('v_pre'),costo_unit:numv('v_cos'),canal:val('v_can'),evento:val('v_ev'),
+        cliente_id:val('v_cli')||null,notas:val('v_not')})
+        .then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta registrada');cargar()}) },
+    v.id?function(){api('/api/venta/borrar',{id:v.id}).then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta eliminada')})}:null);
+}
+
+document.getElementById('lupaFull').addEventListener('click',function(){this.classList.remove('on')});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){document.getElementById('lupaFull').classList.remove('on');document.getElementById('velo').classList.remove('on');cerrarF2()}
+  if(e.key==='/'&&document.activeElement!==qEl&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){e.preventDefault();qEl.focus();qEl.select()}
+});
+</script>
+</body>
+</html>

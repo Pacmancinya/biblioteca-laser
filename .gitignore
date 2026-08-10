@@ -1,0 +1,13 @@
+# datos de cada computador (no se comparten)
+config.json
+biblioteca.json
+biblioteca.db
+biblioteca.db-wal
+biblioteca.db-shm
+.miniaturas/
+_papelera/
+_paquete/
+_version_anterior/
+.venv/
+__pycache__/
+*.pyc

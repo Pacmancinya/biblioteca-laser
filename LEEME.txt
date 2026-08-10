@@ -1,0 +1,108 @@
+============================================
+  BIBLIOTECA LASER
+============================================
+
+PARA ABRIRLA
+------------
+Doble clic en:   INICIAR Biblioteca.bat
+
+La primera vez prepara todo solo (si el PC no tiene Python, lo
+instala). Despues te pide elegir la carpeta donde tienes tus
+modelos. Eso es todo.
+
+Se abre una ventana negra (dejala abierta) y la biblioteca se
+abre en el navegador. Para cerrar: cierra la ventana negra.
+
+
+LAS 5 SECCIONES (arriba)
+------------------------
+BIBLIOTECA -> todos tus modelos
+FAVORITOS  -> los que marcaste con la estrella
+CLIENTES   -> tus clientes, encargos y cobros
+VENTAS     -> lo que vendes en ferias o a clientes
+PANEL      -> resumen: cuanto vendiste, ganancia, por cobrar
+
+
+BUSCAR Y FILTRAR
+----------------
+* Buscador arriba: escribe lo que sea (ej: "dinosaurio", "caja").
+* Columna izquierda:
+    - Que incluye: con foto / con manual / LightBurn / 3D / con stock
+    - Formato (dxf, svg, lbrn2...) y grosor (3mm, 1.5mm...)
+    - Categorias: se abren en arbol (categoria -> subcategoria -> ...)
+      Haz clic en la flechita para desplegar.
+* "Quitar filtros" deja todo como al principio.
+
+
+AL HACER CLIC EN UN MODELO
+--------------------------
+Se abre su ficha con 4 pestanas:
+
+ARCHIVOS  -> los botones para abrir:
+               Abrir en LightBurn / Ver manual / Ver imagen /
+               Abrir carpeta. Abajo la lista completa de archivos.
+
+EDITAR    -> cambia el nombre, la categoria, notas, el costo,
+             el precio de venta y el stock para ferias.
+             OJO: esto se guarda SOLO en la app; tus carpetas y
+             archivos NO se tocan nunca.
+
+CARGAR    -> agrega o reemplaza el modelo, la imagen o el manual.
+ARCHIVOS     Se copian a la carpeta del modelo.
+
+HISTORIAL -> si reemplazaste un archivo, aqui estan las versiones
+             anteriores (se guardan las ultimas 3) y puedes volver
+             atras con un boton. Se guardan en la subcarpeta
+             "_versiones_anteriores" dentro del modelo.
+
+La estrella (arriba a la izquierda de cada foto) marca favoritos.
+
+
+CLIENTES Y COBROS
+-----------------
+* "+ Nuevo cliente": nombre, telefono, correo, notas.
+* "+ Nuevo encargo": que te pidieron, para quien, precio, cuanto
+  abono, fecha de entrega/vencimiento y si ya pago.
+* Lo vencido y sin pagar aparece marcado en rojo.
+* En la lista de clientes ves cuanto te debe cada uno.
+
+
+VENTAS (FERIAS)
+---------------
+"+ Registrar venta": que vendiste, cuantos, a que precio y cuanto
+te costo. El precio puede ser distinto en cada venta (como en la
+feria). Si el modelo tenia stock, se descuenta solo.
+
+
+PANEL
+-----
+Cuanto vendiste (30 dias y total), tu ganancia, lo que te deben,
+encargos vencidos, lo que mas vendes y ventas por mes.
+
+
+CUANDO AGREGUES MODELOS NUEVOS
+------------------------------
+Doble clic en:  Actualizar modelos.bat
+(Revisa la carpeta y suma los nuevos. Tus favoritos, precios,
+clientes y ventas NO se pierden.)
+
+
+SI CAMBIAS LA CARPETA DE MODELOS DE LUGAR
+-----------------------------------------
+Doble clic en:  Cambiar carpeta de modelos.bat
+
+
+SI ALGO NO FUNCIONA
+-------------------
+Doble clic en:  SOLUCIONAR-PROBLEMAS.bat
+Saca una foto de lo que muestra.
+
+
+TUS DATOS
+---------
+Todo lo que editas (favoritos, precios, clientes, ventas) se
+guarda en el archivo  biblioteca.db  de esta carpeta.
+Si quieres respaldarlo, copia ese archivo.
+
+La biblioteca solo LEE tus modelos. No mueve ni borra nada.
+Lo unico que escribe es cuando TU cargas un archivo nuevo.
