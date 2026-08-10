@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
-  "novedades": "Primera versión: biblioteca con categorías, favoritos, clientes, ventas, panel, duplicados y papelera.",
+  "version": "1.0.1",
+  "novedades": "Prueba del sistema de actualizaciones.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }
