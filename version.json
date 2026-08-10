@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
-  "novedades": "Prueba del sistema de actualizaciones.",
+  "version": "1.0.2",
+  "novedades": "Arreglado el instalador: ahora instala Python correctamente en PCs que no lo tienen y ya no se confunde con el alias de Microsoft Store.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }
