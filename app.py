@@ -14,9 +14,11 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
+# A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
+WHATSAPP_SOPORTE = "56954703465"
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 INDICE = os.path.join(BASE, "biblioteca.json")
@@ -720,7 +722,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/sugerencias":
             return self._send(200, {"items": db.sugerencias(),
-                                    "whatsapp": CFG.get("whatsapp", "")})
+                                    "whatsapp": CFG.get("whatsapp", WHATSAPP_SOPORTE)})
 
         if r == "/api/ocultos":
             lista = []
