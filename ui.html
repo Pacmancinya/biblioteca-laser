@@ -393,10 +393,19 @@
         <p class="sub" id="rutaTxt">—</p>
         <div class="barra">
           <button class="btn" id="btnReindexar">Buscar modelos nuevos</button>
-          <button class="btn pri" id="btnCambiarCarpeta">📁 Cambiar carpeta</button>
+          <button class="btn pri" id="btnCambiarCarpeta">📁 Elegir otra carpeta</button>
         </div>
-        <p class="sub" style="margin:0">Al cambiar de carpeta se vuelven a leer los modelos.
-        Tus favoritos, precios, clientes y ventas <b>no se pierden</b>.</p>
+        <div class="campo" style="margin-top:6px">
+          <label class="lb">O escribe / pega aquí la ruta de la carpeta</label>
+          <div style="display:flex;gap:8px">
+            <input id="rutaManual" placeholder="Ejemplo:  G:\Modelos   o   D:\Laser\Mis modelos">
+            <button class="btn" id="btnUsarRuta" style="flex:none">Usar esta</button>
+          </div>
+        </div>
+        <p class="sub" style="margin:0">Truco: abre la carpeta en el Explorador, haz clic en la barra
+        de dirección de arriba, copia (Ctrl+C) y pégala aquí.<br>
+        Al cambiar de carpeta se vuelven a leer los modelos. Tus favoritos, precios,
+        clientes y ventas <b>no se pierden</b>.</p>
         <div id="carpetaCont"></div>
       </div>
     </div>
@@ -1102,7 +1111,8 @@ function kpi(l,v,c){return '<div class="kpi '+(c||'')+'"><div class="l">'+l+'</d
 // ---------------- ajustes ----------------
 function verAjustes(){
   api('/api/version').then(function(v){
-    document.getElementById('verTxt').innerHTML='Tienes la versión <b style="color:var(--amb2)">'+esc(v.version)+'</b>';
+    document.getElementById('verTxt').innerHTML='Tienes la versión <b style="color:var(--amb2)">'
+      + esc(v.version)+(v.nombre?' — '+esc(v.nombre):'')+'</b>';
   });
   document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
     +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
@@ -1194,8 +1204,10 @@ document.getElementById('btnRevisar').onclick=function(){
   api('/api/actualizacion/revisar').then(function(r){
     if(r.error){ c.innerHTML='<p class="sub" style="color:var(--rojo)">'+esc(r.error)+'</p>'
       +'<p class="sub">Si no hay internet, pídele a Ruperto el ZIP nuevo y descomprímelo encima de esta carpeta.</p>'; return; }
-    if(!r.hay_nueva){ c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Estás al día (versión '+esc(r.actual)+').</p>'; return; }
-    c.innerHTML='<div class="caja" style="border-color:var(--amb)"><h4>¡Hay una versión nueva: '+esc(r.disponible)+'!</h4>'
+    if(!r.hay_nueva){ c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Estás al día (versión '
+      +esc(r.actual)+(r.actual_nombre?' — '+esc(r.actual_nombre):'')+').</p>'; return; }
+    c.innerHTML='<div class="caja" style="border-color:var(--amb)"><h4>¡Hay una versión nueva: '
+      +esc(r.disponible)+(r.disponible_nombre?' — '+esc(r.disponible_nombre):'')+'!</h4>'
       +(r.novedades?'<p class="sub">'+esc(r.novedades)+'</p>':'')
       +'<button class="btn pri" id="btnAplicar">Actualizar ahora</button></div>';
     document.getElementById('btnAplicar').onclick=function(){
@@ -1222,18 +1234,35 @@ document.getElementById('fileImportar').onchange=function(){
   };
   lector.readAsText(f); this.value='';
 };
-document.getElementById('btnCambiarCarpeta').onclick=function(){
-  var b=this, c=document.getElementById('carpetaCont');
-  b.disabled=true; b.textContent='Elige la carpeta...';
-  c.innerHTML='<p class="sub">Se abrió una ventana para elegir la carpeta. Si no la ves, búscala en la barra de tareas.</p>';
-  api('/api/carpeta/cambiar',{}).then(function(r){
-    b.disabled=false; b.textContent='📁 Cambiar carpeta';
-    if(r.ok){ c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo: '+r.total.toLocaleString('es-CL')+' modelos en la carpeta nueva.</p>';
-      toast('Carpeta cambiada'); cargar().then(function(){ verAjustes(); aplicar(); }); }
-    else c.innerHTML='<p class="sub" style="color:var(--rojo)">'+esc(r.error||'No se pudo')+'</p>';
-  }).catch(function(){ b.disabled=false; b.textContent='📁 Cambiar carpeta';
+function cambiarCarpeta(ruta, boton){
+  var c=document.getElementById('carpetaCont');
+  var txt=boton.textContent;
+  boton.disabled=true; boton.textContent=ruta?'Leyendo...':'Elige la carpeta...';
+  c.innerHTML='<p class="sub">'+(ruta
+      ? 'Leyendo los modelos de esa carpeta, espera un momento...'
+      : 'Se abrió una ventana para elegir la carpeta.<br><b>Si no la ves, búscala en la barra de tareas</b> (abajo, en la barra de Windows).')+'</p>';
+  api('/api/carpeta/cambiar', ruta?{carpeta:ruta}:{}).then(function(r){
+    boton.disabled=false; boton.textContent=txt;
+    if(r.ok){
+      c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo: '+r.total.toLocaleString('es-CL')+' modelos encontrados en la carpeta nueva.</p>';
+      toast('Carpeta cambiada'); document.getElementById('rutaManual').value='';
+      cargar().then(function(){ verAjustes(); aplicar(); });
+    } else {
+      c.innerHTML='<p class="sub" style="color:var(--rojo)">'+esc(r.error||'No se pudo')+'</p>'
+        + (r.detalle?'<p class="sub" style="font-family:var(--fm);font-size:11px">'+esc(r.detalle)+'</p>':'');
+    }
+  }).catch(function(){ boton.disabled=false; boton.textContent=txt;
     c.innerHTML='<p class="sub" style="color:var(--rojo)">No se pudo cambiar la carpeta.</p>'; });
+}
+document.getElementById('btnCambiarCarpeta').onclick=function(){ cambiarCarpeta('', this) };
+document.getElementById('btnUsarRuta').onclick=function(){
+  var r=document.getElementById('rutaManual').value.trim();
+  if(!r) return toast('Escribe la ruta primero',true);
+  cambiarCarpeta(r, this);
 };
+document.getElementById('rutaManual').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnUsarRuta').click(); }
+});
 document.getElementById('btnReindexar').onclick=function(){
   var b=this; b.textContent='Buscando...'; b.disabled=true;
   api('/api/reindexar',{}).then(function(r){

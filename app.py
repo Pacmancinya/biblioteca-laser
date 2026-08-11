@@ -14,7 +14,8 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3"
+APP_NOMBRE = "Cotizador"          # nombre corto de esta versión, para reconocerla
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -505,16 +506,35 @@ def cambiar_carpeta(nueva=None):
     """Cambia la carpeta de modelos y vuelve a indexar.
     Si no se pasa ruta, abre el selector de carpetas de Windows."""
     if not nueva:
+        # buscamos un python con ventanas (pythonw no siempre puede abrir diálogos)
+        exe = sys.executable
+        alt = os.path.join(os.path.dirname(exe), "python.exe")
+        if os.path.basename(exe).lower().startswith("pythonw") and os.path.exists(alt):
+            exe = alt
         try:
-            r = subprocess.run([sys.executable, os.path.join(BASE, "elegir_carpeta.py")],
+            r = subprocess.run([exe, os.path.join(BASE, "elegir_carpeta.py"), RAIZ or ""],
                                cwd=BASE, capture_output=True, text=True, timeout=300)
-            nueva = (r.stdout or "").strip().splitlines()[-1].strip() if r.stdout.strip() else ""
+            nueva = (r.stdout or "").strip()
+            if not nueva:
+                err = (r.stderr or "").strip()
+                if err == "cancelado" or r.returncode == 1:
+                    return {"error": "No elegiste ninguna carpeta. "
+                                     "Si no viste la ventana, búscala en la barra de tareas "
+                                     "o escribe la ruta abajo."}
+                return {"error": "No pude abrir la ventana para elegir la carpeta. "
+                                 "Escribe o pega la ruta abajo.",
+                        "detalle": err[:200]}
+        except subprocess.TimeoutExpired:
+            return {"error": "La ventana quedó abierta demasiado rato. Inténtalo de nuevo."}
         except Exception as e:
-            return {"error": f"no se pudo abrir el selector: {e}"}
+            return {"error": "No pude abrir la ventana para elegir la carpeta. "
+                             "Escribe o pega la ruta abajo.", "detalle": str(e)[:200]}
+
+    nueva = nueva.strip().strip('"').strip()
     if not nueva:
-        return {"error": "no se eligió ninguna carpeta"}
+        return {"error": "Escribe la ruta de la carpeta."}
     if not os.path.isdir(nueva):
-        return {"error": "esa carpeta no existe"}
+        return {"error": f"No encuentro esa carpeta: {nueva}"}
 
     cfg = cargar_config()
     cfg["biblioteca"] = nueva
@@ -607,8 +627,8 @@ def revisar_actualizacion():
     nueva = info.get("version", "0")
     return {
         "ok": True,
-        "actual": APP_VERSION,
-        "disponible": nueva,
+        "actual": APP_VERSION, "actual_nombre": APP_NOMBRE,
+        "disponible": nueva, "disponible_nombre": info.get("nombre", ""),
         "hay_nueva": _version_tupla(nueva) > _version_tupla(APP_VERSION),
         "novedades": info.get("novedades", ""),
         "zip": info.get("zip", ""),
@@ -820,7 +840,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"grupos": buscar_duplicados()})
 
         if r == "/api/version":
-            return self._send(200, {"version": APP_VERSION})
+            return self._send(200, {"version": APP_VERSION, "nombre": APP_NOMBRE})
 
         if r == "/api/actualizacion/revisar":
             return self._send(200, revisar_actualizacion())

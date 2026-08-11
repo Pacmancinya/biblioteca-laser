@@ -1,5 +1,6 @@
 {
-  "version": "1.2.0",
-  "novedades": "NUEVO: calculadora de precios. Cada modelo tiene una pestaña 'Cotizar' que calcula cuánto te cuesta y a cuánto venderlo, con las mismas fórmulas de tus Excel (costo por minuto, material por cm2, luz, mano de obra, depreciación y utilidad). En Ajustes puedes actualizar tus costos y materiales.",
+  "version": "1.3",
+  "nombre": "Cotizador",
+  "novedades": "Calculadora de precios en cada modelo, con tus mismas fórmulas (costo por minuto, material por cm2, luz, mano de obra y utilidad). Tus costos y materiales se editan en Ajustes. Además: ya se puede cambiar la carpeta escribiendo o pegando la ruta, sin depender de la ventana.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }
