@@ -222,6 +222,14 @@
   .dupi .dn b{display:block;font-family:var(--fd);font-size:13.5px}
   .dupi .dn small{color:var(--tx3);font-family:var(--fm);font-size:10.5px}
   .dupi .mejor{background:#1D3D22;color:#A9E5AC;font-family:var(--fm);font-size:9.5px;padding:3px 7px;border-radius:99px;font-weight:700}
+  /* resultado de la cotización */
+  .qres{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-top:14px}
+  .qrow{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:13.5px;color:var(--tx2)}
+  .qrow b{font-family:var(--fm);color:var(--tx);font-variant-numeric:tabular-nums}
+  .qrow.sub2{border-top:1px solid var(--line);margin-top:6px;padding-top:10px;color:var(--tx)}
+  .qrow.sub2 b{color:var(--amb2);font-size:15px}
+  .qrow.tot{border-top:2px solid var(--amb);margin-top:8px;padding-top:11px;font-family:var(--fd);font-size:15px;color:var(--tx)}
+  .qrow.tot b{color:var(--ok);font-size:20px;font-family:var(--fd)}
   .zona{border:2px dashed var(--line);border-radius:11px;padding:16px;text-align:center;color:var(--tx3);cursor:pointer;font-size:13px;transition:.15s}
   .zona:hover,.zona.drag{border-color:var(--amb);color:var(--amb2);background:var(--amb-dim)}
 
@@ -362,6 +370,13 @@
       </div>
 
       <div class="caja">
+        <h4>💲 Costos para cotizar</h4>
+        <p class="sub">De aquí sale el precio que te sugiere la app en cada modelo.
+        Actualízalo cuando te suban los costos.</p>
+        <div id="costosCont"></div>
+      </div>
+
+      <div class="caja">
         <h4>Respaldo de tus datos</h4>
         <p class="sub">Guarda tus favoritos, nombres y categorías corregidas, precios, clientes y ventas.
         Sirve para pasarlos a otro computador o para no perderlos.</p>
@@ -405,12 +420,14 @@
     <div class="mtabs" id="mtabs">
       <button class="mtab on" data-p="archivos">Archivos</button>
       <button class="mtab" data-p="editar">Editar</button>
+      <button class="mtab" data-p="cotizar">💲 Cotizar</button>
       <button class="mtab" data-p="cargar">Cargar archivos</button>
       <button class="mtab" data-p="versiones">Historial</button>
     </div>
     <div class="mb">
       <div class="mpanel on" id="p-archivos"><div class="cols"><div><div class="prev" id="dPrev"></div><div class="acciones" id="dAcc"></div></div><div id="dArch"></div></div></div>
       <div class="mpanel" id="p-editar"></div>
+      <div class="mpanel" id="p-cotizar"></div>
       <div class="mpanel" id="p-cargar"></div>
       <div class="mpanel" id="p-versiones"></div>
     </div>
@@ -698,7 +715,7 @@ function abrirModelo(rel){
     document.getElementById('dArch').innerHTML=h;
     var bo=document.getElementById('dOcultar');
     bo.textContent = v.oculto ? '👁 Volver a mostrar' : '🙈 Quitar de la biblioteca';
-    panelEditar(m,v); panelCargar(m); panelVersiones(m);
+    panelEditar(m,v); panelCotizar(m,v); panelCargar(m); panelVersiones(m);
     document.querySelector('.mtab[data-p="archivos"]').click();
     document.getElementById('velo').classList.add('on');
   });
@@ -706,7 +723,7 @@ function abrirModelo(rel){
 document.getElementById('mtabs').addEventListener('click',function(e){
   var b=e.target.closest('.mtab'); if(!b) return;
   [].forEach.call(this.children,function(c){c.classList.toggle('on',c===b)});
-  ['archivos','editar','cargar','versiones'].forEach(function(p){document.getElementById('p-'+p).classList.toggle('on',p===b.dataset.p)});
+  ['archivos','editar','cotizar','cargar','versiones'].forEach(function(p){document.getElementById('p-'+p).classList.toggle('on',p===b.dataset.p)});
 });
 document.getElementById('dCerrar').addEventListener('click',function(){document.getElementById('velo').classList.remove('on')});
 document.getElementById('dOcultar').addEventListener('click',function(){
@@ -881,6 +898,68 @@ function panelEditar(m,v){
 function val(id){var e=document.getElementById(id);return e?e.value.trim():''}
 function numv(id){var v=val(id);return v===''?null:parseFloat(v)}
 
+// -------- cotizar --------
+var COT=null;
+function panelCotizar(m,v){
+  var cont=document.getElementById('p-cotizar');
+  cont.innerHTML='<p class="sub">Calculando...</p>';
+  api('/api/cotizacion').then(function(c){
+    COT=c;
+    var opc=c.materiales.map(function(x){
+      return '<option value="'+x.id+'">'+esc(x.nombre)+(x.proveedor?' · '+esc(x.proveedor):'')+' — '+clp(x.precio)+'</option>' }).join('');
+    cont.innerHTML=
+      '<div class="fila3"><div class="campo"><label class="lb">Ancho del corte (cm)</label><input id="q_an" type="number" min="0" step="0.1" value="40"></div>'
+      +'<div class="campo"><label class="lb">Largo del corte (cm)</label><input id="q_la" type="number" min="0" step="0.1" value="50"></div>'
+      +'<div class="campo"><label class="lb">Minutos de corte</label><input id="q_min" type="number" min="0" value="'+(c.ajustes.minutos_defecto||30)+'"></div></div>'
+      +'<div class="campo"><label class="lb">Material</label><select id="q_mat">'+opc+'</select></div>'
+      +'<div class="fila3"><div class="campo"><label class="lb">Luz por pieza</label><input id="q_luz" type="number" min="0" value="'+(c.ajustes.luz_pieza||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Mano de obra</label><input id="q_mo" type="number" min="0" value="'+(c.ajustes.manoobra_pieza||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Utilidad %</label><input id="q_uti" type="number" min="0" value="'+(c.ajustes.utilidad||100)+'"></div></div>'
+      +'<div class="fila2"><div class="campo"><label class="lb">Cantidad de piezas</label><input id="q_pz" type="number" min="1" value="1"></div>'
+      +'<div class="campo"><label class="lb">Otros costos (opcional)</label><input id="q_ex" type="number" min="0" value=""></div></div>'
+      +'<div id="q_res"></div>'
+      +'<div style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap">'
+      +'<button class="btn pri" id="q_calc">Calcular</button>'
+      +'<button class="btn" id="q_guardar">Guardar como costo y precio del modelo</button></div>'
+      +'<p class="sub" style="margin-top:10px">El costo del minuto de máquina sale de tus costos fijos ('
+      + '<b style="color:var(--amb2)">'+clp(c.minuto.final)+' por minuto</b>). Se ajusta en ⚙️ Ajustes.</p>';
+    // si el modelo ya tenía medidas guardadas en las notas, no las tocamos
+    document.getElementById('q_calc').onclick=calcular;
+    document.getElementById('q_guardar').onclick=function(){
+      if(!COT || !COT.ultimo) return toast('Primero aprieta Calcular',true);
+      api('/api/meta',{rel:m.rel, costo:COT.ultimo.subtotal, precio:COT.ultimo.total}).then(function(){
+        toast('Guardado: costo '+clp(COT.ultimo.subtotal)+' · precio '+clp(COT.ultimo.total));
+        cargar().then(function(){aplicar()});
+      });
+    };
+    ['q_an','q_la','q_min','q_mat','q_luz','q_mo','q_uti','q_pz','q_ex'].forEach(function(id){
+      var e=document.getElementById(id); if(e) e.addEventListener('change',calcular);
+    });
+    calcular();
+  });
+}
+function calcular(){
+  var d={ material_id:+val('q_mat'), ancho:numv('q_an'), largo:numv('q_la'), minutos:numv('q_min'),
+          luz:numv('q_luz'), manoobra:numv('q_mo'), utilidad:numv('q_uti'),
+          piezas:numv('q_pz')||1, extra:numv('q_ex') };
+  api('/api/cotizar',d).then(function(r){
+    COT.ultimo=r;
+    var f=function(et,v,cl){ return '<div class="qrow"><span>'+et+'</span><b'+(cl?' class="'+cl+'"':'')+'>'+v+'</b></div>' };
+    document.getElementById('q_res').innerHTML='<div class="qres">'
+      + f('Material ('+r.area_corte+' cm² × '+clp(r.costo_cm2*1000)+'/1000cm²)', clp(r.costo_material))
+      + f('Corte ('+r.minutos+' min × '+clp(r.costo_minuto)+')', clp(r.costo_corte))
+      + f('Luz', clp(r.costo_luz))
+      + f('Mano de obra', clp(r.costo_manoobra))
+      + f('Depreciación equipo', clp(r.costo_depreciacion))
+      + (r.extra?f('Otros', clp(r.extra)):'')
+      + '<div class="qrow sub2"><span>Lo que te cuesta</span><b>'+clp(r.subtotal)+'</b></div>'
+      + f('Utilidad ('+r.utilidad_pct+'%)', clp(r.utilidad))
+      + '<div class="qrow tot"><span>PRECIO DE VENTA</span><b>'+clp(r.total)+'</b></div>'
+      + (r.piezas>1?'<div class="qrow tot"><span>Por '+r.piezas+' piezas</span><b>'+clp(r.total_piezas)+'</b></div>':'')
+      + '</div>';
+  });
+}
+
 // -------- cargar archivos --------
 function panelCargar(m){
   var tipos=[['modelo','Modelo para cortar','.dxf,.svg,.eps,.cdr,.ai,.lbrn,.lbrn2,.plt,.dwg'],
@@ -1027,6 +1106,87 @@ function verAjustes(){
   });
   document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
     +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
+  verCostos();
+}
+
+function verCostos(){
+  api('/api/cotizacion').then(function(c){
+    var m=c.minuto;
+    var h='<div class="kpis" style="margin-bottom:14px">'
+      +'<div class="kpi amb"><div class="l">Cuesta el minuto</div><div class="v">'+clp(m.parcial)+'</div></div>'
+      +'<div class="kpi ok"><div class="l">Cobras el minuto (+'+m.ganancia_pct+'%)</div><div class="v">'+clp(m.final)+'</div></div>'
+      +'</div>';
+    h+='<h4 style="font-size:.95rem;margin:16px 0 8px">Tus costos fijos</h4>'
+      +'<table><tr><th>Detalle</th><th class="num">Monto</th><th class="num">Se reparte en</th><th class="num">Por minuto</th><th></th></tr>'
+      + m.detalle.map(function(x){ return '<tr><td>'+esc(x.nombre)+'<br><small style="color:var(--tx3)">'+esc(x.grupo||'')+'</small></td>'
+        +'<td class="num">'+clp(x.monto)+'</td><td class="num">'+x.horas+' h</td>'
+        +'<td class="num">'+clp(x.valor_minuto*100)+'/100min</td>'
+        +'<td><button class="btn mini" data-cf="'+x.id+'">Editar</button></td></tr>' }).join('')
+      +'</table><div class="barra" style="margin-top:11px"><button class="btn" id="nuevoCosto">+ Agregar costo</button></div>';
+
+    h+='<h4 style="font-size:.95rem;margin:20px 0 8px">Otros valores</h4>'
+      +'<div class="fila3">'
+      +'<div class="campo"><label class="lb">Ganancia sobre el minuto %</label><input id="a_gm" type="number" value="'+(c.ajustes.ganancia_minuto||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Luz por pieza</label><input id="a_luz" type="number" value="'+(c.ajustes.luz_pieza||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Mano de obra por pieza</label><input id="a_mo" type="number" value="'+(c.ajustes.manoobra_pieza||0)+'"></div>'
+      +'</div><div class="fila3">'
+      +'<div class="campo"><label class="lb">Depreciación por minuto</label><input id="a_dep" type="number" step="0.01" value="'+(c.ajustes.depreciacion_minuto||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Utilidad %</label><input id="a_uti" type="number" value="'+(c.ajustes.utilidad||100)+'"></div>'
+      +'<div class="campo"><label class="lb">Minutos por defecto</label><input id="a_md" type="number" value="'+(c.ajustes.minutos_defecto||30)+'"></div>'
+      +'</div><button class="btn pri" id="guardarAjustes">Guardar valores</button>';
+
+    h+='<h4 style="font-size:.95rem;margin:22px 0 8px">Materiales ('+c.materiales.length+')</h4>'
+      +'<table><tr><th>Material</th><th>Proveedor</th><th class="num">Plancha</th><th class="num">Precio</th><th class="num">Por cm²</th><th></th></tr>'
+      + c.materiales.map(function(x){ var a=(x.ancho||0)*(x.largo||0);
+        return '<tr><td><b>'+esc(x.nombre)+'</b></td><td>'+esc(x.proveedor||'—')+'</td>'
+        +'<td class="num">'+(x.ancho||0)+'×'+(x.largo||0)+' cm</td><td class="num">'+clp(x.precio)+'</td>'
+        +'<td class="num">'+(a?clp(x.precio/a*100)+'/100cm²':'—')+'</td>'
+        +'<td><button class="btn mini" data-mat="'+x.id+'">Editar</button></td></tr>' }).join('')
+      +'</table><div class="barra" style="margin-top:11px"><button class="btn" id="nuevoMat">+ Agregar material</button></div>';
+
+    document.getElementById('costosCont').innerHTML=h;
+    document.getElementById('guardarAjustes').onclick=function(){
+      api('/api/ajuste',{ajustes:{ganancia_minuto:val('a_gm'),luz_pieza:val('a_luz'),
+        manoobra_pieza:val('a_mo'),depreciacion_minuto:val('a_dep'),utilidad:val('a_uti'),
+        minutos_defecto:val('a_md')}}).then(function(){ toast('Valores guardados'); verCostos(); });
+    };
+    document.getElementById('nuevoCosto').onclick=function(){ formCosto(null) };
+    document.getElementById('nuevoMat').onclick=function(){ formMaterial(null) };
+    document.getElementById('costosCont').onclick=function(e){
+      var cf=e.target.closest('[data-cf]');
+      if(cf){ var x=c.minuto.detalle.find(function(y){return y.id==cf.dataset.cf}); return formCosto(x) }
+      var mt=e.target.closest('[data-mat]');
+      if(mt){ var y=c.materiales.find(function(z){return z.id==mt.dataset.mat}); return formMaterial(y) }
+    };
+  });
+}
+function formCosto(x){
+  x=x||{};
+  abrirF2(x.id?'Editar costo fijo':'Nuevo costo fijo',
+    '<div class="campo"><label class="lb">Qué es</label><input id="k_nom" value="'+esc(x.nombre||'')+'"></div>'
+   +'<div class="fila2"><div class="campo"><label class="lb">Cuánto cuesta</label><input id="k_mon" type="number" value="'+(x.monto||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Se reparte en (horas)</label><input id="k_hrs" type="number" value="'+(x.horas||800)+'"></div></div>'
+   +'<div class="campo"><label class="lb">Grupo</label><input id="k_gru" value="'+esc(x.grupo||'Mensuales')+'"></div>'
+   +'<p class="sub">Los equipos se reparten en 9.600 horas (12 meses × 800) y los gastos del mes en 800 horas.</p>',
+    function(){ if(!val('k_nom')) return toast('Ponle un nombre',true);
+      api('/api/costo-fijo',{id:x.id,nombre:val('k_nom'),monto:numv('k_mon'),horas:numv('k_hrs'),grupo:val('k_gru')})
+        .then(function(){ cerrarF2(); toast('Guardado'); verCostos(); }) },
+    x.id?function(){ api('/api/costo-fijo/borrar',{id:x.id}).then(function(){ cerrarF2(); toast('Eliminado'); verCostos() }) }:null);
+}
+function formMaterial(x){
+  x=x||{};
+  abrirF2(x.id?'Editar material':'Nuevo material',
+    '<div class="fila2"><div class="campo"><label class="lb">Nombre</label><input id="t_nom" value="'+esc(x.nombre||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Proveedor</label><input id="t_prov" value="'+esc(x.proveedor||'')+'"></div></div>'
+   +'<div class="fila3"><div class="campo"><label class="lb">Ancho plancha (cm)</label><input id="t_an" type="number" value="'+(x.ancho||122)+'"></div>'
+   +'<div class="campo"><label class="lb">Largo plancha (cm)</label><input id="t_la" type="number" value="'+(x.largo||244)+'"></div>'
+   +'<div class="campo"><label class="lb">Espesor (mm)</label><input id="t_es" type="number" step="0.1" value="'+(x.espesor||3)+'"></div></div>'
+   +'<div class="campo"><label class="lb">Precio de la plancha completa</label><input id="t_pre" type="number" value="'+(x.precio||'')+'"></div>',
+    function(){ if(!val('t_nom')) return toast('Ponle un nombre',true);
+      api('/api/material',{id:x.id,nombre:val('t_nom'),proveedor:val('t_prov'),ancho:numv('t_an'),
+        largo:numv('t_la'),espesor:numv('t_es'),precio:numv('t_pre')})
+        .then(function(){ cerrarF2(); toast('Guardado'); verCostos(); }) },
+    x.id?function(){ api('/api/material/borrar',{id:x.id}).then(function(){ cerrarF2(); toast('Eliminado'); verCostos() }) }:null);
 }
 document.getElementById('btnRevisar').onclick=function(){
   var c=document.getElementById('actCont');

@@ -93,6 +93,33 @@ CREATE TABLE IF NOT EXISTS papelera (
   fecha   INTEGER
 );
 
+-- materiales: planchas con su medida y precio (para el costo por cm2)
+CREATE TABLE IF NOT EXISTS materiales (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre    TEXT,
+  proveedor TEXT,
+  ancho     REAL,     -- cm
+  largo     REAL,     -- cm
+  espesor   REAL,     -- mm
+  precio    REAL,     -- precio de la plancha completa
+  activo    INTEGER DEFAULT 1
+);
+
+-- costos fijos del taller (para calcular el costo por minuto)
+CREATE TABLE IF NOT EXISTS costos_fijos (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre TEXT,
+  monto  REAL,
+  horas  REAL,        -- en cuántas horas se prorratea
+  grupo  TEXT
+);
+
+-- ajustes sueltos (clave/valor)
+CREATE TABLE IF NOT EXISTS ajustes (
+  clave TEXT PRIMARY KEY,
+  valor TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sugerencias (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
   texto  TEXT,
@@ -345,6 +372,108 @@ def item_papelera(pid):
 
 def quitar_de_papelera(pid):
     ejecutar("DELETE FROM papelera WHERE id=?", (pid,))
+
+
+# ---------------------------------------------------------------- ajustes
+AJUSTES_POR_DEFECTO = {
+    "ganancia_minuto": "100",     # % que se le suma al costo por minuto
+    "luz_pieza": "300",           # costo luz por pieza
+    "manoobra_pieza": "1000",     # mano de obra por pieza
+    "depreciacion_minuto": "0.2", # depreciación del equipo por minuto
+    "utilidad": "100",            # % de utilidad sobre el costo total
+    "minutos_defecto": "30",
+}
+
+def ajuste(clave, por_defecto=None):
+    r = fila("SELECT valor FROM ajustes WHERE clave=?", (clave,))
+    if r:
+        return r["valor"]
+    return AJUSTES_POR_DEFECTO.get(clave, por_defecto)
+
+def ajustes_todos():
+    d = dict(AJUSTES_POR_DEFECTO)
+    for r in filas("SELECT * FROM ajustes"):
+        d[r["clave"]] = r["valor"]
+    return d
+
+def guardar_ajuste(clave, valor):
+    ejecutar("INSERT OR REPLACE INTO ajustes (clave,valor) VALUES (?,?)", (clave, str(valor)))
+
+
+# ---------------------------------------------------------------- materiales
+def materiales():
+    return filas("SELECT * FROM materiales WHERE activo=1 ORDER BY nombre COLLATE NOCASE")
+
+def guardar_material(d, mid=None):
+    campos = ("nombre", "proveedor", "ancho", "largo", "espesor", "precio")
+    if mid:
+        sets = ", ".join(f"{k}=?" for k in campos)
+        ejecutar(f"UPDATE materiales SET {sets} WHERE id=?", [d.get(k) for k in campos] + [mid])
+        return mid
+    return ejecutar(f"INSERT INTO materiales ({','.join(campos)}) VALUES ({','.join('?'*len(campos))})",
+                    [d.get(k) for k in campos])
+
+def borrar_material(mid):
+    ejecutar("UPDATE materiales SET activo=0 WHERE id=?", (mid,))
+
+
+# ---------------------------------------------------------------- costos fijos
+def costos_fijos():
+    return filas("SELECT * FROM costos_fijos ORDER BY id")
+
+def guardar_costo_fijo(d, cid=None):
+    campos = ("nombre", "monto", "horas", "grupo")
+    if cid:
+        sets = ", ".join(f"{k}=?" for k in campos)
+        ejecutar(f"UPDATE costos_fijos SET {sets} WHERE id=?", [d.get(k) for k in campos] + [cid])
+        return cid
+    return ejecutar(f"INSERT INTO costos_fijos ({','.join(campos)}) VALUES ({','.join('?'*len(campos))})",
+                    [d.get(k) for k in campos])
+
+def borrar_costo_fijo(cid):
+    ejecutar("DELETE FROM costos_fijos WHERE id=?", (cid,))
+
+
+def sembrar_costos():
+    """Carga por primera vez los datos de los Excel del papá."""
+    if not costos_fijos():
+        equipos = [("Laser diodo 10w", 400000, 9600), ("Computador", 950000, 9600),
+                   ("Extractor", 14000, 9600), ("Bomba Aire", 92000, 9600),
+                   ("Capital inicial", 500000, 9600)]
+        mensuales = [("Luz", 12000, 800), ("Tel", 7500, 800), ("Combustible auto", 30000, 800),
+                     ("Mantenimiento auto", 30000, 800), ("Otros (limpieza cama)", 10000, 800),
+                     ("Sueldo", 500000, 800), ("Varios", 20000, 800)]
+        for n, m, h in equipos:
+            guardar_costo_fijo({"nombre": n, "monto": m, "horas": h, "grupo": "Equipos"})
+        for n, m, h in mensuales:
+            guardar_costo_fijo({"nombre": n, "monto": m, "horas": h, "grupo": "Mensuales"})
+
+    if not materiales():
+        mats = [
+            ("MDF 3mm", "Placacentro", 3, 185), ("MDF 6mm", "Placacentro", 6, 223),
+            ("MDF 15mm", "Placacentro", 15, 548), ("MDF 19mm", "Placacentro", 19, 745),
+            ("Triplay 3mm", "Placacentro", 3, 178), ("Triplay 6mm", "Placacentro", 6, 343),
+            ("Triplay 9mm", "Placacentro", 9, 487), ("Triplay 12.7mm", "Placacentro", 12.7, 571),
+            ("Triplay 19mm", "Placacentro", 19, 761),
+            ("MDF 3mm", "Cabinet And Chalet", 3, 143), ("MDF 6mm", "Cabinet And Chalet", 6, 233),
+            ("MDF 9mm", "Cabinet And Chalet", 9, 351), ("MDF 12mm", "Cabinet And Chalet", 12, 462),
+            ("MDF 15mm", "Cabinet And Chalet", 15, 468), ("MDF 19mm", "Cabinet And Chalet", 19, 559),
+            ("Triplay 3mm", "Cabinet And Chalet", 3, 188), ("Triplay 6mm", "Cabinet And Chalet", 6, 280),
+            ("Triplay 9mm", "Cabinet And Chalet", 9, 435), ("Triplay 12mm", "Cabinet And Chalet", 12, 579),
+            ("Triplay 15mm", "Cabinet And Chalet", 15, 690), ("Triplay 19mm", "Cabinet And Chalet", 19, 825),
+            ("Acrílico transparente 1.5mm", "Acrílico", 1.5, 933),
+            ("Acrílico transparente 2mm", "Acrílico", 2, 1128),
+            ("Acrílico transparente 3mm", "Acrílico", 3, 1388),
+            ("Acrílico transparente 4.5mm", "Acrílico", 4.5, 2061),
+            ("Acrílico transparente 6mm", "Acrílico", 6, 2689),
+            ("Acrílico color 3mm", "Acrílico", 3, 1649),
+        ]
+        for n, prov, esp, precio in mats:
+            guardar_material({"nombre": n, "proveedor": prov, "ancho": 122, "largo": 244,
+                              "espesor": esp, "precio": precio})
+        # la plancha del Excel de ejemplo
+        guardar_material({"nombre": "MDF 3.19mm (plancha grande)", "proveedor": "",
+                          "ancho": 122, "largo": 244, "espesor": 3.19, "precio": 12000})
 
 
 # ---------------------------------------------------------------- sugerencias

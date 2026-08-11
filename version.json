@@ -1,5 +1,5 @@
 {
-  "version": "1.1.2",
-  "novedades": "Ahora los botones de manual y foto aparecen siempre: si el modelo no los tiene, salen apagados con 'No se encontró' y sirven para agregarlos.",
+  "version": "1.2.0",
+  "novedades": "NUEVO: calculadora de precios. Cada modelo tiene una pestaña 'Cotizar' que calcula cuánto te cuesta y a cuánto venderlo, con las mismas fórmulas de tus Excel (costo por minuto, material por cm2, luz, mano de obra, depreciación y utilidad). En Ajustes puedes actualizar tus costos y materiales.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

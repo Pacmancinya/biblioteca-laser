@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.2.0"
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -426,6 +426,81 @@ def buscar_duplicados():
 # ---------------------------------------------------------------- respaldo de datos
 ARCHIVOS_CODIGO = ["app.py", "db.py", "indexar.py", "categorias.py", "ui.html"]
 
+# ---------------------------------------------------------------- cotización
+def costo_por_minuto():
+    """Igual que el Excel 'Costo Minuto Laser': cada costo fijo se reparte en sus
+    horas, se pasa a minutos, se suman todos y se le agrega el % de ganancia."""
+    detalle, parcial = [], 0.0
+    for c in db.costos_fijos():
+        horas = float(c["horas"] or 0)
+        monto = float(c["monto"] or 0)
+        if horas <= 0:
+            continue
+        valor_hora = monto / horas
+        valor_min = valor_hora / 60.0
+        parcial += valor_min
+        detalle.append({"id": c["id"], "nombre": c["nombre"], "grupo": c["grupo"],
+                        "monto": monto, "horas": horas,
+                        "valor_hora": round(valor_hora, 4), "valor_minuto": round(valor_min, 5)})
+    aj = db.ajustes_todos()
+    pct = float(aj.get("ganancia_minuto") or 0)
+    ganancia = parcial * pct / 100.0
+    return {"detalle": detalle, "parcial": round(parcial, 4),
+            "ganancia_pct": pct, "ganancia": round(ganancia, 4),
+            "final": round(parcial + ganancia, 4)}
+
+
+def cotizar(d):
+    """Igual que el Excel 'CALCULO_DE_COSTOS': material por cm2 + tiempo de corte
+    + luz + mano de obra + depreciación, y al final la utilidad."""
+    aj = db.ajustes_todos()
+    num = lambda v, x=0.0: (float(v) if v not in (None, "") else x)
+
+    minutos = num(d.get("minutos"), num(aj.get("minutos_defecto"), 30))
+    ancho_c, largo_c = num(d.get("ancho")), num(d.get("largo"))
+    piezas = max(1, int(num(d.get("piezas"), 1)))
+
+    # material
+    mat, costo_cm2, area_plancha = None, 0.0, 0.0
+    if d.get("material_id"):
+        mat = db.fila("SELECT * FROM materiales WHERE id=?", (d["material_id"],))
+    if mat:
+        area_plancha = num(mat["ancho"]) * num(mat["largo"])
+        if area_plancha > 0:
+            costo_cm2 = num(mat["precio"]) / area_plancha
+    area_corte = ancho_c * largo_c
+    costo_material = area_corte * costo_cm2
+
+    # costo del minuto de máquina
+    cmin = num(d.get("costo_minuto")) or costo_por_minuto()["final"]
+    costo_corte = minutos * cmin
+
+    costo_luz = num(d.get("luz"), num(aj.get("luz_pieza"), 0))
+    costo_mo = num(d.get("manoobra"), num(aj.get("manoobra_pieza"), 0))
+    dep_min = num(d.get("depreciacion_minuto"), num(aj.get("depreciacion_minuto"), 0))
+    costo_dep = minutos * dep_min
+    extra = num(d.get("extra"))
+
+    subtotal = costo_material + costo_corte + costo_luz + costo_mo + costo_dep + extra
+    pct_util = num(d.get("utilidad"), num(aj.get("utilidad"), 0))
+    utilidad = subtotal * pct_util / 100.0
+    total = subtotal + utilidad
+
+    return {
+        "material": (mat["nombre"] + (" · " + mat["proveedor"] if mat["proveedor"] else "")) if mat else "",
+        "area_plancha": round(area_plancha, 1), "costo_cm2": round(costo_cm2, 5),
+        "area_corte": round(area_corte, 1),
+        "costo_material": round(costo_material), "minutos": minutos,
+        "costo_minuto": round(cmin, 3), "costo_corte": round(costo_corte),
+        "costo_luz": round(costo_luz), "costo_manoobra": round(costo_mo),
+        "costo_depreciacion": round(costo_dep), "extra": round(extra),
+        "subtotal": round(subtotal), "utilidad_pct": pct_util, "utilidad": round(utilidad),
+        # el total por N piezas se calcula con el total ya redondeado,
+        # así lo que ve el usuario siempre cuadra (precio x cantidad)
+        "total": round(total), "piezas": piezas, "total_piezas": round(total) * piezas,
+    }
+
+
 def cambiar_carpeta(nueva=None):
     """Cambia la carpeta de modelos y vuelve a indexar.
     Si no se pasa ruta, abre el selector de carpetas de Windows."""
@@ -720,6 +795,14 @@ class Handler(BaseHTTPRequestHandler):
         if r == "/api/papelera":
             return self._send(200, {"items": db.papelera()})
 
+        if r == "/api/cotizacion":
+            return self._send(200, {
+                "materiales": db.materiales(),
+                "costos_fijos": db.costos_fijos(),
+                "ajustes": db.ajustes_todos(),
+                "minuto": costo_por_minuto(),
+            })
+
         if r == "/api/sugerencias":
             return self._send(200, {"items": db.sugerencias(),
                                     "whatsapp": CFG.get("whatsapp", WHATSAPP_SOPORTE)})
@@ -819,6 +902,40 @@ class Handler(BaseHTTPRequestHandler):
             recargar_parcial(d.get("rel", ""))
             return self._send(200, res)
 
+        if r == "/api/cotizar":
+            return self._send(200, cotizar(self._json()))
+
+        if r == "/api/material":
+            d = self._json()
+            if not str(d.get("nombre") or "").strip():
+                return self._send(400, {"error": "ponle un nombre al material"})
+            db.guardar_material(d, d.get("id"))
+            return self._send(200, {"ok": True, "materiales": db.materiales()})
+
+        if r == "/api/material/borrar":
+            db.borrar_material(self._json().get("id"))
+            return self._send(200, {"ok": True, "materiales": db.materiales()})
+
+        if r == "/api/costo-fijo":
+            d = self._json()
+            if not str(d.get("nombre") or "").strip():
+                return self._send(400, {"error": "ponle un nombre al costo"})
+            db.guardar_costo_fijo(d, d.get("id"))
+            return self._send(200, {"ok": True, "costos_fijos": db.costos_fijos(),
+                                    "minuto": costo_por_minuto()})
+
+        if r == "/api/costo-fijo/borrar":
+            db.borrar_costo_fijo(self._json().get("id"))
+            return self._send(200, {"ok": True, "costos_fijos": db.costos_fijos(),
+                                    "minuto": costo_por_minuto()})
+
+        if r == "/api/ajuste":
+            d = self._json()
+            for k, v in (d.get("ajustes") or {}).items():
+                db.guardar_ajuste(k, v)
+            return self._send(200, {"ok": True, "ajustes": db.ajustes_todos(),
+                                    "minuto": costo_por_minuto()})
+
         if r == "/api/sugerencia":
             t = str(self._json().get("texto") or "").strip()
             if not t:
@@ -914,6 +1031,7 @@ def recargar_parcial(rel):
 
 def main():
     db.cx()
+    db.sembrar_costos()
     print("=" * 54)
     print("  BIBLIOTECA LASER")
     print("=" * 54)
