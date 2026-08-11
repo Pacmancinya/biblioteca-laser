@@ -214,6 +214,30 @@
   .arch button:hover{background:var(--amb);color:#14120F}
   .arch button.bx{background:none;border:1px solid var(--line);color:var(--tx3);padding:5px 9px}
   .arch button.bx:hover{background:var(--rojo);border-color:var(--rojo);color:#fff}
+  .arch button.bo{background:none;border:1px solid var(--line);color:var(--tx3);padding:5px 9px;letter-spacing:1px}
+  .arch button.bo:hover{background:var(--panel);border-color:var(--amb);color:var(--amb2)}
+  .arch button.apagado{opacity:.5}
+  /* ventanita para elegir con qué programa abrir */
+  .pop{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:100%;max-width:420px;padding:19px 21px}
+  .pop h3{font-family:var(--fd);margin:0 0 4px;font-size:1.08rem}
+  .pop .sub{color:var(--tx3);font-size:12.5px;margin-bottom:13px;word-break:break-all}
+  .pop-secc{font-family:var(--fd);font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3);margin:15px 0 8px;border-top:1px solid var(--line);padding-top:12px}
+  .fmts{display:flex;flex-wrap:wrap;gap:7px}
+  .fmt{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:8px 14px;cursor:pointer;font-family:var(--fm);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .fmt:hover{border-color:var(--amb);background:var(--amb-dim);color:var(--amb2)}
+  .fmt:disabled{opacity:.5;cursor:default}
+  .nota{color:var(--tx3);font-size:12px;line-height:1.45;margin:0}
+  .opc-prog{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:11px;padding:11px 13px;margin-bottom:7px;cursor:pointer;font-family:var(--fd);font-size:13.5px}
+  .opc-prog:hover{border-color:var(--amb);background:var(--amb-dim)}
+  .opc-prog small{display:block;color:var(--tx3);font-size:11px;font-family:var(--fb);font-weight:400}
+  .opc-prog .ico{font-size:17px;flex:none}
+  .recordar{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tx2);margin-top:11px;cursor:pointer}
+  /* gestor de categorías */
+  .catg{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--panel2)}
+  .catg-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .catg-h b{font-family:var(--fd);font-size:1rem;color:var(--amb2)}
+  .catg-h .sub{flex:1;margin:0;font-size:12px}
+  .pop-pie{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
   .dupg{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:13px}
   .dupg h5{font-family:var(--fd);font-size:1rem;margin:0 0 11px;color:var(--amb2)}
   .dupi{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;background:var(--panel2)}
@@ -370,6 +394,20 @@
       </div>
 
       <div class="caja">
+        <h4>Categorías y subcategorías</h4>
+        <p class="sub">Puedes crear subcategorías nuevas, cambiarles el nombre o sacarlas.
+        Los modelos se mueven solos; en el disco no se toca nada.</p>
+        <div id="catsCont"></div>
+      </div>
+
+      <div class="caja">
+        <h4>Programas para abrir los archivos</h4>
+        <p class="sub">Con qué programa se abre cada tipo de archivo. La app los busca sola;
+        si no los encuentra, puedes indicarle dónde están.</p>
+        <div id="progsCont"></div>
+      </div>
+
+      <div class="caja">
         <h4>💲 Costos para cotizar</h4>
         <p class="sub">De aquí sale el precio que te sugiere la app en cada modelo.
         Actualízalo cuando te suban los costos.</p>
@@ -474,12 +512,26 @@
   </div>
 </div>
 
+<!-- qué hacer con un archivo: abrirlo o convertirlo -->
+<div class="velo" id="veloProg">
+  <div class="pop">
+    <h3 id="progTit">Este archivo</h3>
+    <div class="pop-secc">Abrir con</div>
+    <div id="progOpc"></div>
+    <label class="recordar"><input type="checkbox" id="progRec" checked> Usar siempre este programa para los archivos <b id="progExt"></b></label>
+    <div class="pop-secc">Convertir a</div>
+    <div id="convOpc"></div>
+    <div class="pop-pie"><button class="btn" id="progCerrar">Cerrar</button></div>
+  </div>
+</div>
+
 <div class="lupa-full" id="lupaFull"><img id="lupaImg" src="" alt=""></div>
 <div class="toast" id="toast"></div>
 
 <script>
 var D=null, MODELOS=[], CLIENTES=[], PEDIDOS=[], VENTAS=[];
 var filtrados=[], mostrados=0, LOTE=60, actual=null;
+var PROGS={};        // qué programa abre cada archivo del modelo abierto
 var st={q:"",cat:"",sub:"",flags:{},fmt:"",gr:"",vista:"biblio",verOcultos:false};
 var qEl=document.getElementById('q'), grid=document.getElementById('grid');
 
@@ -630,7 +682,7 @@ function lote(){
     var b=''; if(m.lb)b+='<span class="bdg lb">LBRN</span>'; if(m.man)b+='<span class="bdg man">PDF</span>';
     if(m.d3)b+='<span class="bdg d3">3D</span>'; if(m.stock>0)b+='<span class="bdg stk">'+m.stock+'</span>';
     h+='<div class="card" data-rel="'+esc(m.rel)+'">'
-      + '<div class="ph">'+(m.img?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'" onerror="this.style.display=\'none\'">':SINIMG)
+      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'" onerror="this.style.display=\'none\'">':SINIMG)
       + '<button class="estrella'+(m.fav?' on':'')+'" data-fav="'+esc(m.rel)+'"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9L6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg></button>'
       + '<div class="badges">'+b+'</div></div>'
       + '<div class="info"><div class="nm">'+esc(m.n)+'</div><div class="rt">'+esc(m.ruta_partes.slice(0,2).join(' › '))+'</div>'
@@ -689,15 +741,22 @@ function abrirModelo(rel){
     document.getElementById('dRuta').textContent=m.rel;
     // preview + acciones
     var prev=document.getElementById('dPrev');
-    if(m.preview){ var src='/api/archivo?p='+encodeURIComponent(m.ruta+'\\'+m.preview);
-      prev.innerHTML='<img src="'+esc(src)+'">';
+    // si no hay foto, se muestra la miniatura que trae adentro el archivo de LightBurn
+    var src = m.preview ? '/api/archivo?p='+encodeURIComponent(m.ruta+'\\'+m.preview)
+            : (v.prev ? '/thumb?rel='+encodeURIComponent(m.rel) : '');
+    if(src){
+      prev.innerHTML='<img src="'+esc(src)+'" onerror="this.parentNode.innerHTML=SINIMG">';
       prev.querySelector('img').onclick=function(){document.getElementById('lupaImg').src=src;document.getElementById('lupaFull').classList.add('on')};
     } else prev.innerHTML=SINIMG;
     var corte=m.archivos.corte||[], lb=corte.filter(function(f){return /\.lbrn2?$/i.test(f)});
+    PROGS=m.programas||{};
     var pri=lb[0]||corte[0], a=[];
     // Los botones SIEMPRE aparecen. Si no hay archivo, quedan apagados
     // y sirven para agregarlo.
-    if(pri) a.push('<button class="acc pri" data-act="lightburn" data-f="'+esc(pri)+'"><svg viewBox="0 0 24 24" fill="#14120F"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>Abrir en LightBurn<small>'+esc(pri)+'</small></span></button>');
+    if(pri){
+      var pp=PROGS[pri], dest=pp?('Abrir en '+pp.nombre):'Abrir para cortar';
+      a.push('<button class="acc pri" data-act="auto" data-f="'+esc(pri)+'"><svg viewBox="0 0 24 24" fill="#14120F"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>'+esc(dest)+'<small>'+esc(pri)+'</small></span></button>');
+    }
     else a.push('<button class="acc vacio" data-falta="modelo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>Sin archivo para cortar<small>No se encontró · toca para agregar uno</small></span></button>');
 
     if((m.archivos.manual||[]).length)
@@ -716,9 +775,13 @@ function abrirModelo(rel){
     var g=[['corte','Para cortar'],['manual','Manuales'],['imagen','Imágenes'],['3d','3D'],['video','Videos'],['otro','Comprimidos']],h='';
     g.forEach(function(p){var arr=m.archivos[p[0]]||[];if(!arr.length)return;
       h+='<div class="secc"><h4>'+p[1]+' ('+arr.length+')</h4>';
-      arr.slice(0,40).forEach(function(f){var ext=(f.split('.').pop()||'').toLowerCase(),cc=p[0]==='corte';
+      arr.slice(0,40).forEach(function(f){var ext=(f.split('.').pop()||'').toLowerCase();
+        var pg=PROGS[f];
+        // El texto del botón dice a dónde va: "LightBurn", "CorelDRAW"...
+        var txt=pg?pg.nombre:'Abrir', tit=pg?('Abrir con '+pg.nombre+(pg.instalado?'':' (no está instalado)')):'Abrir con Windows';
         h+='<div class="arch"><span class="ax">'+esc(ext)+'</span><span class="an">'+esc(f)+'</span>'
-          +'<button data-act="'+(cc?'lightburn':'abrir')+'" data-f="'+esc(f)+'">'+(cc?'Cortar':'Abrir')+'</button>'
+          +'<button data-act="auto" data-f="'+esc(f)+'" title="'+esc(tit)+'"'+(pg&&!pg.instalado?' class="apagado"':'')+'>'+esc(txt)+'</button>'
+          +'<button class="bo" data-otro="'+esc(f)+'" title="Abrir con otro programa">⋯</button>'
           +'<button class="bx" data-borrar="'+esc(f)+'" title="Enviar a la papelera">🗑</button></div>'});
       h+='</div>'});
     document.getElementById('dArch').innerHTML=h;
@@ -783,7 +846,7 @@ function pintarDupLote(){
         return '<div class="dupg"><h5>Repetido '+(i+1)+' — '+gr.length+' copias</h5>'
           + gr.map(function(m,j){
             return '<div class="dupi">'
-              +(m.img?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'">':'<div class="th"></div>')
+              +(m.prev?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'">':'<div class="th"></div>')
               +'<div class="dn"><b>'+esc(m.nombre)+(j===0?' <span class="mejor">más completo</span>':'')+'</b>'
               +'<small>'+esc(m.ruta)+' · '+m.n_corte+' archivos · '+m.mb+' MB'+(m.fav?' · ★':'')+'</small></div>'
               +'<button class="btn mini" data-verdup="'+esc(m.rel)+'">Ver</button>'
@@ -865,12 +928,79 @@ document.getElementById('velo').addEventListener('click',function(e){
            setTimeout(function(){z.classList.remove('drag')},1400); }
     return;
   }
+  // "⋯" = abrir este archivo con otro programa
+  var ot=e.target.closest('[data-otro]');
+  if(ot&&actual){ elegirOtroPrograma(ot.dataset.otro); return; }
+
   var b=e.target.closest('[data-act]'); if(!b||!actual) return;
   var act=b.dataset.act, f=b.dataset.f, p=f?(actual.ruta+'\\'+f):actual.ruta;
   var u = act==='carpeta' ? '/api/carpeta?p='+encodeURIComponent(actual.ruta)
-        : '/api/abrir?p='+encodeURIComponent(p)+'&modo='+(act==='lightburn'?'lightburn':'auto');
-  api(u).then(function(r){ toast(r.ok?(act==='carpeta'?'Carpeta abierta':'Abriendo...'):(r.error||'No se pudo'), !r.ok) });
+        : '/api/abrir?p='+encodeURIComponent(p)+'&modo='+encodeURIComponent(act==='auto'?'auto':act);
+  api(u).then(function(r){
+    if(r.ok){ toast(r.con?('Abriendo en '+r.con+'...'):(act==='carpeta'?'Carpeta abierta':'Abriendo...')); return; }
+    toast(r.error||'No se pudo', true);
+  });
 });
+
+// -------- abrir con otro programa --------
+var ICONO_PROG={lightburn:'🔥',corel:'🎨',inkscape:'✏️'};
+function elegirOtroPrograma(f){
+  var ext='.'+(f.split('.').pop()||'').toLowerCase();
+  api('/api/programas').then(function(r){
+    var h='';
+    (r.programas||[]).forEach(function(p){
+      h+='<button class="opc-prog" data-clave="'+esc(p.clave)+'"><span class="ico">'+(ICONO_PROG[p.clave]||'📄')+'</span>'
+        +'<span><b>'+esc(p.nombre)+'</b><small>'+(p.instalado?esc(p.ruta):'No está instalado · lo puedes buscar en Ajustes')+'</small></span></button>';
+    });
+    h+='<button class="opc-prog" data-clave="sistema"><span class="ico">🪟</span><span><b>El programa de siempre</b><small>El que Windows usa por defecto</small></span></button>';
+    document.getElementById('progTit').innerHTML='Este archivo<div class="sub">'+esc(f)+'</div>';
+    document.getElementById('progOpc').innerHTML=h;
+    document.getElementById('progExt').textContent=ext;
+    document.getElementById('progRec').checked=true;
+    document.getElementById('veloProg').classList.add('on');
+    document.getElementById('veloProg').dataset.f=f;
+    document.getElementById('veloProg').dataset.ext=ext;
+  });
+  // qué se puede convertir
+  document.getElementById('convOpc').innerHTML='<p class="nota">Viendo...</p>';
+  api('/api/convertir/opciones?f='+encodeURIComponent(f)).then(function(c){
+    var cont=document.getElementById('convOpc');
+    if(!c.formatos.length){ cont.innerHTML='<p class="nota">'+esc(c.motivo||'No se puede convertir.')+'</p>'; return; }
+    var necesita = /^\.(svg|pdf|dxf|eps|ps|emf|wmf|ai)$/.test(ext) && !c.inkscape;
+    cont.innerHTML='<div class="fmts">'+c.formatos.map(function(x){
+      return '<button class="fmt" data-conv="'+esc(x)+'"'+(necesita?' disabled':'')+'>'+esc(x)+'</button>'}).join('')+'</div>'
+      +(necesita?'<p class="nota" style="margin-top:9px">Para estos archivos hace falta <b>Inkscape</b>, que es gratis (inkscape.org). Instálalo y aparecerán activos.</p>'
+       : ext==='.lbrn'||ext==='.lbrn2' ? '<p class="nota" style="margin-top:9px">De LightBurn se saca la imagen de vista previa que trae adentro. El dibujo en sí solo lo exporta LightBurn.</p>'
+       : '<p class="nota" style="margin-top:9px">El archivo nuevo se guarda en la misma carpeta del modelo.</p>');
+  });
+}
+document.getElementById('convOpc').addEventListener('click',function(e){
+  var b=e.target.closest('[data-conv]'); if(!b||!actual) return;
+  var vp=document.getElementById('veloProg'), f=vp.dataset.f;
+  b.disabled=true; b.textContent='...';
+  api('/api/convertir',{p:actual.ruta+'\\'+f,formato:b.dataset.conv,rel:actual.rel}).then(function(r){
+    vp.classList.remove('on');
+    if(r.ok){ toast('Listo: '+r.archivo.split('\\').pop()); abrirModelo(actual.rel); }
+    else toast(r.error||'No se pudo', true);
+  });
+});
+document.getElementById('progOpc').addEventListener('click',function(e){
+  var b=e.target.closest('[data-clave]'); if(!b) return;
+  var vp=document.getElementById('veloProg'), f=vp.dataset.f, ext=vp.dataset.ext, clave=b.dataset.clave;
+  vp.classList.remove('on');
+  var p=actual.ruta+'\\'+f;
+  var recordar=document.getElementById('progRec').checked;
+  var hacerlo=function(){
+    api('/api/abrir?p='+encodeURIComponent(p)+'&modo='+encodeURIComponent(clave)).then(function(r){
+      toast(r.ok?('Abriendo en '+(r.con||'Windows')+'...'):(r.error||'No se pudo'), !r.ok);
+      if(recordar) abrirModelo(actual.rel);   // refrescar los botones con la nueva elección
+    });
+  };
+  if(recordar) api('/api/programa/asignar',{ext:ext,clave:clave==='sistema'?'sistema':clave}).then(hacerlo);
+  else hacerlo();
+});
+document.getElementById('progCerrar').onclick=function(){document.getElementById('veloProg').classList.remove('on')};
+document.getElementById('veloProg').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('on') });
 
 // -------- editar --------
 function panelEditar(m,v){
@@ -879,7 +1009,9 @@ function panelEditar(m,v){
   document.getElementById('p-editar').innerHTML=
     '<div class="campo"><label class="lb">Nombre</label><input id="e_nombre" value="'+esc(v.n||m.nombre)+'"></div>'
     +'<div class="fila2"><div class="campo"><label class="lb">Categoría</label><select id="e_cat">'+cats+'</select></div>'
-    +'<div class="campo"><label class="lb">Subcategoría</label><select id="e_sub"></select></div></div>'
+    +'<div class="campo"><label class="lb">Subcategoría</label>'
+    +'<div style="display:flex;gap:6px"><select id="e_sub" style="flex:1;min-width:0"></select>'
+    +'<button class="btn mini" id="e_nuevasub" title="Crear una subcategoría nueva">+</button></div></div></div>'
     +'<div class="fila3"><div class="campo"><label class="lb">Costo</label><input id="e_costo" type="number" min="0" value="'+(v.costo||'')+'"></div>'
     +'<div class="campo"><label class="lb">Precio venta</label><input id="e_precio" type="number" min="0" value="'+(v.precio||'')+'"></div>'
     +'<div class="campo"><label class="lb">Stock (feria)</label><input id="e_stock" type="number" min="0" value="'+(v.stock||0)+'"></div></div>'
@@ -897,6 +1029,20 @@ function panelEditar(m,v){
   }
   llenarSubs(v.s||'');
   document.getElementById('e_cat').onchange=function(){ llenarSubs(''); };
+  // crear una subcategoría nueva sin salir de aquí
+  document.getElementById('e_nuevasub').onclick=function(){
+    var cat=document.getElementById('e_cat').value;
+    var nom=prompt('Nombre de la subcategoría nueva dentro de "'+cat+'":');
+    if(!nom||!nom.trim()) return;
+    nom=nom.trim();
+    api('/api/subcategoria/crear',{categoria:cat,nombre:nom}).then(function(r){
+      if(!r.ok){ toast(r.error||'No se pudo',true); return; }
+      var s=document.getElementById('e_sub');
+      s.innerHTML+='<option>'+esc(nom)+'</option>'; s.value=nom;
+      toast('Subcategoría "'+nom+'" creada');
+      cargar();
+    });
+  };
   document.getElementById('e_guardar').onclick=function(){
     var d={rel:m.rel,nombre:val('e_nombre'),categoria:val('e_cat'),subcategoria:val('e_sub'),
       costo:numv('e_costo'),precio:numv('e_precio'),stock:numv('e_stock')||0,
@@ -1116,8 +1262,104 @@ function verAjustes(){
   });
   document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
     +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
-  verCostos();
+  verCostos(); verProgramas(); verCategorias();
 }
+
+// -------- gestor de categorías y subcategorías --------
+function verCategorias(){
+  var h='';
+  (D.categorias||[]).forEach(function(c){
+    h+='<div class="catg"><div class="catg-h"><b>'+esc(c.nombre)+'</b>'
+      +'<span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span>'
+      +'<button class="btn mini" data-nuevasub="'+esc(c.nombre)+'">+ Subcategoría</button></div>';
+    if(!c.subs.length) h+='<p class="sub" style="margin:6px 0 0">Sin subcategorías todavía.</p>';
+    c.subs.forEach(function(s){
+      h+='<div class="arch"><span class="an">'+esc(s.nombre)
+        +' <span style="color:var(--tx3);font-size:11px">'+s.n.toLocaleString('es-CL')+'</span></span>'
+        +'<button class="bo" data-rensub="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'" title="Cambiarle el nombre">✎</button>'
+        +'<button class="bx" data-borsub="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'" title="Sacar esta subcategoría">✕</button></div>';
+    });
+    h+='</div>';
+  });
+  document.getElementById('catsCont').innerHTML=h;
+}
+document.getElementById('catsCont').addEventListener('click',function(e){
+  var refrescar=function(msg){ return function(r){
+    if(!r.ok){ toast(r.error||'No se pudo',true); return; }
+    toast(typeof msg==='function'?msg(r):msg);
+    cargar().then(function(){ verCategorias(); aplicar(); });
+  }};
+
+  var n=e.target.closest('[data-nuevasub]');
+  if(n){
+    var nom=prompt('Nombre de la subcategoría nueva dentro de "'+n.dataset.nuevasub+'":');
+    if(nom&&nom.trim()) api('/api/subcategoria/crear',{categoria:n.dataset.nuevasub,nombre:nom.trim()})
+      .then(refrescar('Subcategoría creada'));
+    return;
+  }
+  var rn=e.target.closest('[data-rensub]');
+  if(rn){
+    var nv=prompt('Nombre nuevo para "'+rn.dataset.rensub+'":', rn.dataset.rensub);
+    if(nv&&nv.trim()) api('/api/subcategoria/renombrar',
+      {categoria:rn.dataset.cat,vieja:rn.dataset.rensub,nueva:nv.trim()})
+      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos movidos'}));
+    return;
+  }
+  var bs=e.target.closest('[data-borsub]');
+  if(bs){
+    var cat=bs.dataset.cat, sub=bs.dataset.borsub;
+    var g=(D.categorias||[]).filter(function(c){return c.nombre===cat})[0];
+    var otras=(g?g.subs:[]).map(function(s){return s.nombre}).filter(function(s){return s!==sub});
+    var msg='¿Sacar la subcategoría "'+sub+'" de '+cat+'?\n\n'
+      +'Sus modelos NO se borran. Escribe a qué subcategoría los pasamos,\n'
+      +'o déjalo en blanco para que queden sin subcategoría.'
+      +(otras.length?'\n\nQue ya existen: '+otras.join(', '):'');
+    var destino=prompt(msg,'');
+    if(destino===null) return;
+    api('/api/subcategoria/borrar',{categoria:cat,nombre:sub,destino:destino.trim()})
+      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos a '+(r.destino||'sin subcategoría')}));
+  }
+});
+
+function verProgramas(){
+  api('/api/programas').then(function(r){
+    var h='';
+    (r.programas||[]).forEach(function(p){
+      var ext=(p.exts||[]).join('  ');
+      h+='<div class="arch" style="padding:11px 13px">'
+        +'<span class="ico" style="font-size:18px">'+(ICONO_PROG[p.clave]||'📄')+'</span>'
+        +'<span class="an" style="white-space:normal"><b>'+esc(p.nombre)+'</b>'
+        +(ext?' <span style="color:var(--tx3);font-family:var(--fm);font-size:11px">'+esc(ext)+'</span>':'')
+        +'<br><small style="color:'+(p.instalado?'var(--tx3)':'var(--rojo)')+'">'
+        +(p.instalado?esc(p.ruta):'No lo encuentro en este computador')+'</small></span>'
+        +'<button data-buscarprog="'+esc(p.clave)+'">'+(p.instalado?'Cambiar':'Buscarlo')+'</button></div>';
+    });
+    var asign=r.asignaciones||{}, ks=Object.keys(asign);
+    if(ks.length){
+      h+='<p class="sub" style="margin:12px 0 6px">Cambios que hiciste tú:</p>';
+      ks.sort().forEach(function(k){
+        var nom=(r.programas||[]).filter(function(p){return p.clave===asign[k]})[0];
+        h+='<div class="arch"><span class="ax">'+esc(k.replace('.',''))+'</span>'
+          +'<span class="an">se abre con <b>'+esc(nom?nom.nombre:'el programa de Windows')+'</b></span>'
+          +'<button class="bx" data-quitarasig="'+esc(k)+'" title="Volver a lo normal">✕</button></div>';
+      });
+    }
+    document.getElementById('progsCont').innerHTML=h;
+  });
+}
+document.getElementById('progsCont').addEventListener('click',function(e){
+  var b=e.target.closest('[data-buscarprog]');
+  if(b){
+    b.disabled=true; b.textContent='Buscando...';
+    api('/api/programa',{clave:b.dataset.buscarprog}).then(function(r){
+      if(r.ok) toast(r.nombre+' listo'); else toast(r.error||'No se pudo', true);
+      verProgramas();
+    });
+    return;
+  }
+  var q=e.target.closest('[data-quitarasig]');
+  if(q) api('/api/programa/asignar',{ext:q.dataset.quitarasig,clave:''}).then(function(){verProgramas()});
+});
 
 function verCostos(){
   api('/api/cotizacion').then(function(c){

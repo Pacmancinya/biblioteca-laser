@@ -32,13 +32,16 @@ TAXONOMIA = {
         ("Autos", ["auto", "carro", "coche", "car ", "automovil", "deportivo", "coupe",
                    "combi", "dragster", "sedan", "camioneta", "pickup", "convertible",
                    "roadster", "rally", "nascar", "taxi", "limusina", "ferrari",
-                   "lamborghini", "porsche", "mustang", "beetle", "escarabajo", "vocho",
+                   # ojo: "escarabajo"/"beetle" solos son el INSECTO; el auto va con marca
+                   "vw beetle", "escarabajo vw", "volkswagen escarabajo", "vocho",
+                   "lamborghini", "porsche", "mustang",
                    "jeep", "buggy", "kart", "formula 1", "f1 ", "hot rod", "muscle car",
                    "corvette", "camaro", "delorean", "batimovil", "batmobile", "volkswagen",
                    "mercedes", "bmw", "audi", "toyota", "nissan", "chevrolet", "ford "]),
         ("Camiones y maquinaria", ["camion", "truck", "tractor", "excavadora", "escabadora",
                                    "escavadora", "excavator", "retroexcavadora", "topadora",
-                                   "hormigonera", "volquete", "cisterna",
+                                   "hormigonera", "volquete", "cisterna", "carreta",
+                                   "carreton", "carro de mano", "carruaje", "coche de caballos",
                                    "bulldozer", "grua", "crane", "retroexcavadora", "montacargas",
                                    "forklift", "bus", "autobus", "micro", "furgon", "van ",
                                    "ambulancia", "bombero", "fire truck", "patrulla", "policia",
@@ -50,7 +53,8 @@ TAXONOMIA = {
     ],
     "Animales": [
         ("Insectos y arácnidos", ["insecto", "insect", "abeja", "bee", "biene", "mariposa",
-                                  "butterfly", "borboleta", "escarabajo bicho", "libelula",
+                                  "escarabajo", "beetle", "bicho", "ciervo volante",
+                                  "butterfly", "borboleta", "libelula",
                                   "dragonfly", "arana", "spider", "escorpion", "alacran",
                                   "scorpion", "hormiga", "ant ", "avispa", "grillo", "mantis",
                                   "saltamontes", "mosca", "mosquito", "cucaracha", "ciempies",
@@ -61,7 +65,8 @@ TAXONOMIA = {
                          "pterodactilo", "mamut", "mammoth", "prehistoric", "jurassic",
                          "estegosaurio", "braquiosaurio", "velociraptor", "apatosaurus",
                          "diplodocus", "ankylosaurus", "allosaurus", "parasaurolophus"]),
-        ("Aves", ["ave ", "aves", "bird", "pajaro", "passaro", "aguila", "agila", "aguia",
+        ("Aves", ["ave", "aves", "bird", "pajaro", "passaro", "carpintero", "woodpecker",
+                  "aguila", "agila", "aguia",
                   "eagle", "buho", "owl", "lechuza", "coruja", "loro", "papagayo", "parrot",
                   "colibri", "hummingbird", "gallo", "gallina", "rooster", "pato", "duck",
                   "cisne", "swan", "flamenco", "flamingo", "pinguino", "penguin", "tucan",
@@ -134,7 +139,9 @@ TAXONOMIA = {
                                   "disney", "princesa", "soldado", "caballero", "knight",
                                   "vikingo", "pirata figura", "zombie", "calavera", "skull",
                                   "esqueleto", "monstruo"]),
-        ("Juguetes", ["juguete", "toy ", "toys", "trompo", "yoyo", "balancin", "sonajero",
+        ("Juguetes", ["juguete", "toy", "toys", "carrusel", "carrucel", "carousel",
+                      "rueda de la fortuna", "vuelta al mundo", "noria",
+                      "trompo", "yoyo", "balancin", "sonajero",
                       "cochecito", "casa de munecas", "dollhouse", "tren de juguete",
                       "pista", "circuito", "titere", "marioneta"]),
     ],
@@ -186,7 +193,21 @@ TAXONOMIA = {
 # pistas por carpeta del disco (peso alto: el papá ya las había ordenado así)
 PISTAS_RUTA = {
     "vehiculo": ("Vehículos", None), "vehiculos": ("Vehículos", None),
+    "vehiculos y transporte": ("Vehículos", None), "transporte": ("Vehículos", None),
     "animales": ("Animales", None), "animal": ("Animales", None),
+    "insectos": ("Animales", "Insectos y arácnidos"),
+    "aves": ("Animales", "Aves"), "dinosaurios": ("Animales", "Dinosaurios"),
+    "marinos": ("Animales", "Marinos"), "mascotas": ("Animales", "Mascotas"),
+    "hogar": ("Hogar y muebles", None), "muebles": ("Hogar y muebles", "Muebles"),
+    "cocina": ("Hogar y muebles", "Cocina"), "lamparas": ("Hogar y muebles", "Lámparas y luz"),
+    "juguetes": ("Juegos y juguetes", None), "puzzles": ("Juegos y juguetes", "Puzzles y rompecabezas"),
+    "rompecabezas": ("Juegos y juguetes", "Puzzles y rompecabezas"),
+    "maquetas": ("Casas y maquetas", "Maquetas y arquitectura"),
+    "edificios": ("Casas y maquetas", "Edificios y monumentos"),
+    "castillos": ("Casas y maquetas", "Castillos y fantasía"),
+    "navidad": ("Arte y ocasiones", "Navidad"), "religiosos": ("Arte y ocasiones", "Religioso"),
+    "mandalas": ("Arte y ocasiones", "Mandalas y geometría"),
+    "letreros": ("Arte y ocasiones", "Letreros y carteles"),
     "cajas": ("Hogar y muebles", "Cajas y organizadores"),
     "cajas para vinos y licores": ("Hogar y muebles", "Cocina"),
     "cosina y decoracion": ("Hogar y muebles", "Decoración"),
@@ -223,55 +244,110 @@ def _n(s):
     return " " + re.sub(r"\s+", " ", s).strip() + " "
 
 
-def clasificar(nombre, ruta_partes):
-    """Devuelve (categoria, subcategoria) para un modelo."""
-    txt_nombre = _n(nombre)
-    txt_ruta = _n(" ".join(ruta_partes or []))
-    texto = txt_nombre + txt_ruta
+def _pos(texto, palabra):
+    """Dónde aparece la palabra en el texto, o -1 si no está.
 
-    # 1) el nombre del modelo manda: busca la palabra clave más específica
-    mejor = None
+    Acepta la palabra completa y también su plural o forma alargada
+    ('avion' encuentra 'aviones'), pero NO permite que un pedazo corto pegue
+    dentro de otra palabra ('car' ya no encuentra 'carpintero').
+    """
+    p = palabra.strip()
+    if not p:
+        return -1
+    exacta = texto.find(" " + p + " ")
+    if exacta >= 0:
+        return exacta
+    if len(p) < 4:          # palabras cortas: solo coincidencia exacta
+        return -1
+    # plural / forma alargada: la palabra del texto empieza con la clave
+    i = texto.find(" " + p)
+    while i >= 0:
+        resto = texto[i + 1 + len(p):]
+        sigue = resto.split(" ", 1)[0]
+        if len(sigue) <= 2:   # "aviones" = avion + "es", "cajas" = caja + "s"
+            return i
+        i = texto.find(" " + p, i + 1)
+    return -1
+
+
+def _tiene(texto, palabra):
+    return _pos(texto, palabra) >= 0
+
+
+def _por_palabras(texto):
+    """(categoria, subcategoria) según las palabras clave que aparezcan.
+
+    Gana la que aparece ANTES en el nombre, porque en los nombres de modelos el
+    objeto principal va primero ("Caja corazón" es una caja, no un corazón).
+    Si dos empiezan en el mismo punto, gana la más larga (más específica).
+    """
+    mejor = None   # (posicion, -largo, cat, sub)
     for cat, subs in TAXONOMIA.items():
         for sub, claves in subs:
             for k in claves:
-                kk = " " + k.strip() + " " if not k.endswith(" ") else " " + k
-                if kk in txt_nombre or (" " + k.strip()) in txt_nombre:
-                    largo = len(k.strip())
-                    if mejor is None or largo > mejor[0]:
-                        mejor = (largo, cat, sub)
-    if mejor:
-        return mejor[1], mejor[2]
+                p = k.strip()
+                if not p:
+                    continue
+                pos = _pos(texto, p)
+                if pos < 0:
+                    continue
+                cand = (pos, -len(p), cat, sub)
+                if mejor is None or cand < mejor:
+                    mejor = cand
+    return (mejor[2], mejor[3]) if mejor else None
 
-    # 2) pistas por la carpeta donde estaba guardado
-    for parte in (ruta_partes or []):
+
+def _bonito(s):
+    s = re.sub(r"[_]+", " ", str(s or "")).strip()
+    s = re.sub(r"\s+", " ", s)
+    return (s[:1].upper() + s[1:]) if s else s
+
+
+def clasificar(nombre, ruta_partes):
+    """Devuelve (categoria, subcategoria).
+
+    MANDA LA CARPETA DEL USUARIO: si el modelo está dentro de una carpeta que
+    reconocemos (ej. "Vehiculos"), esa es la categoría, y la subcarpeta
+    siguiente se usa tal cual como subcategoría (ej. "Autos", "Barcos").
+    Solo cuando la carpeta no dice nada se adivina por el nombre.
+    """
+    partes = list(ruta_partes or [])
+    txt_nombre = _n(nombre)
+    texto = txt_nombre + _n(" ".join(partes))
+
+    # 1) LA ORGANIZACIÓN DEL USUARIO MANDA
+    for i, parte in enumerate(partes):
         p = _n(parte).strip()
-        if p in PISTAS_RUTA:
-            cat, sub = PISTAS_RUTA[p]
-            if sub:
-                return cat, sub
-            # categoría sin subcategoría: intenta afinar con el texto completo
-            for s, claves in TAXONOMIA[cat]:
-                for k in claves:
-                    if (" " + k.strip()) in texto:
-                        return cat, s
-            return cat, TAXONOMIA[cat][0][0]
+        if p not in PISTAS_RUTA:
+            continue
+        cat, sub_fija = PISTAS_RUTA[p]
+        if sub_fija:
+            return cat, sub_fija
+        # su subcarpeta siguiente es la subcategoría, con el nombre que él le puso
+        if i + 1 < len(partes):
+            sub = partes[i + 1].strip()
+            if sub and _n(sub).strip() != txt_nombre.strip():
+                return cat, _bonito(sub)
+        # no hay subcarpeta: afinamos con las palabras, pero sin salirnos de la categoría
+        r = _por_palabras(texto)
+        if r and r[0] == cat:
+            return r
+        return cat, TAXONOMIA[cat][0][0]
 
-    # 2.5) utilidades / plantillas del láser
+    # 2) utilidades / plantillas del láser
     for k in CLAVES_UTILIDADES:
-        if (" " + k) in texto:
+        if _tiene(texto, k):
             return "Otros", "Utilidades láser"
 
-    # 3) segunda pasada usando toda la ruta
-    mejor = None
-    for cat, subs in TAXONOMIA.items():
-        for sub, claves in subs:
-            for k in claves:
-                if (" " + k.strip()) in texto:
-                    largo = len(k.strip())
-                    if mejor is None or largo > mejor[0]:
-                        mejor = (largo, cat, sub)
-    if mejor:
-        return mejor[1], mejor[2]
+    # 3) adivinar por el nombre del modelo
+    r = _por_palabras(txt_nombre)
+    if r:
+        return r
+
+    # 4) último intento: con toda la ruta
+    r = _por_palabras(texto)
+    if r:
+        return r
 
     return "Otros", "Sin clasificar"
 

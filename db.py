@@ -134,6 +134,15 @@ CREATE TABLE IF NOT EXISTS huellas (
   hash  TEXT
 );
 
+-- Subcategorías que creó el usuario. Se guardan aparte para que existan
+-- aunque todavía no tengan ningún modelo dentro.
+CREATE TABLE IF NOT EXISTS subcats (
+  categoria    TEXT,
+  subcategoria TEXT,
+  oculta       INTEGER DEFAULT 0,
+  PRIMARY KEY (categoria, subcategoria)
+);
+
 CREATE INDEX IF NOT EXISTS ix_pap_fecha ON papelera(fecha);
 CREATE INDEX IF NOT EXISTS ix_ped_cli ON pedidos(cliente_id);
 CREATE INDEX IF NOT EXISTS ix_ven_fecha ON ventas(fecha);
@@ -214,6 +223,33 @@ def alternar_oculto(rel):
 
 def ocultos():
     return filas("SELECT rel, nombre FROM modelos WHERE oculto=1")
+
+
+# ------------------------------------------------- subcategorías del usuario
+def subcats_propias():
+    """Las que creó el usuario a mano (aunque estén vacías) y las que escondió."""
+    creadas, ocultas = {}, {}
+    for r in filas("SELECT * FROM subcats"):
+        destino = ocultas if r["oculta"] else creadas
+        destino.setdefault(r["categoria"], []).append(r["subcategoria"])
+    return creadas, ocultas
+
+
+def crear_subcat(categoria, subcategoria):
+    ejecutar("INSERT OR REPLACE INTO subcats (categoria, subcategoria, oculta) VALUES (?,?,0)",
+             (categoria, subcategoria))
+
+
+def ocultar_subcat(categoria, subcategoria, oculta=1):
+    """Esconder una subcategoría del clasificador (no se puede 'borrar' de verdad
+    porque la calcula el programa, pero sí dejar de mostrarla)."""
+    ejecutar("INSERT OR REPLACE INTO subcats (categoria, subcategoria, oculta) VALUES (?,?,?)",
+             (categoria, subcategoria, 1 if oculta else 0))
+
+
+def quitar_subcat(categoria, subcategoria):
+    ejecutar("DELETE FROM subcats WHERE categoria=? AND subcategoria=?",
+             (categoria, subcategoria))
 
 
 def alternar_favorito(rel):

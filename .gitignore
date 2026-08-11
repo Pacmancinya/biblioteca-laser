@@ -4,6 +4,7 @@ biblioteca.json
 biblioteca.db
 biblioteca.db-wal
 biblioteca.db-shm
+respaldos/
 .miniaturas/
 _papelera/
 _paquete/

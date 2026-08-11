@@ -14,8 +14,8 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 
-APP_VERSION = "1.3"
-APP_NOMBRE = "Cotizador"          # nombre corto de esta versión, para reconocerla
+APP_VERSION = "1.4"
+APP_NOMBRE = "Categorías y conversor"   # nombre corto de esta versión, para reconocerla
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -80,20 +80,75 @@ CFG = cargar_config()
 
 
 def buscar_lightburn():
-    if CFG.get("lightburn") and os.path.exists(CFG["lightburn"]):
-        return CFG["lightburn"]
-    cand = [r"C:\Program Files\LightBurn\LightBurn.exe",
-            r"C:\Program Files (x86)\LightBurn\LightBurn.exe"]
-    for b in (os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", ""),
-              os.environ.get("LOCALAPPDATA", "")):
-        if b:
-            cand.append(os.path.join(b, "LightBurn", "LightBurn.exe"))
-    for c in cand:
-        if c and os.path.exists(c):
-            CFG["lightburn"] = c
-            guardar_config(CFG)
-            return c
-    return None
+    """Se mantiene por compatibilidad; ahora vive dentro de buscar_programa()."""
+    return buscar_programa("lightburn") or None
+
+
+# ---------------------------------------------------------------- programas
+# Qué programa abre cada tipo de archivo. El usuario puede cambiarlo en Ajustes.
+PROGRAMAS_DEF = {
+    "lightburn": {"nombre": "LightBurn", "exts": [".lbrn", ".lbrn2"],
+                  "buscar": ["LightBurn/LightBurn.exe"]},
+    "corel":     {"nombre": "CorelDRAW", "exts": [".svg", ".cdr", ".ai", ".eps", ".cmx"],
+                  "buscar": ["Corel/CorelDRAW Graphics Suite */Programs64/CorelDRW.exe",
+                             "Corel/CorelDRAW Graphics Suite */Programs/CorelDRW.exe",
+                             "Corel/CorelDRAW*/Programs64/CorelDRW.exe",
+                             "Corel/CorelDRAW*/Programs/CorelDRW.exe"]},
+    "inkscape":  {"nombre": "Inkscape", "exts": [],
+                  "buscar": ["Inkscape/bin/inkscape.exe", "Inkscape/inkscape.exe"]},
+}
+
+
+def buscar_programa(clave):
+    """Busca el .exe de un programa: primero lo que eligió el usuario, luego lo típico."""
+    guardados = CFG.get("programas") or {}
+    # config antigua: la ruta de LightBurn vivía suelta en config.json
+    if clave == "lightburn" and not guardados.get(clave) and CFG.get("lightburn"):
+        guardados["lightburn"] = CFG["lightburn"]
+    p = guardados.get(clave)
+    if p and os.path.exists(p):
+        return p
+    import glob
+    bases = [os.environ.get("ProgramFiles", r"C:\Program Files"),
+             os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+             os.environ.get("LOCALAPPDATA", "")]
+    for patron in PROGRAMAS_DEF.get(clave, {}).get("buscar", []):
+        for b in bases:
+            if not b:
+                continue
+            for hallado in sorted(glob.glob(os.path.join(b, patron.replace("/", os.sep))),
+                                  reverse=True):   # la versión más nueva primero
+                if os.path.exists(hallado):
+                    guardados[clave] = hallado
+                    CFG["programas"] = guardados
+                    guardar_config(CFG)
+                    return hallado
+    return ""
+
+
+def programas_estado():
+    out = []
+    for clave, d in PROGRAMAS_DEF.items():
+        ruta = buscar_programa(clave)
+        out.append({"clave": clave, "nombre": d["nombre"], "exts": d["exts"],
+                    "ruta": ruta, "instalado": bool(ruta)})
+    return out
+
+
+def programa_para(archivo):
+    """Con qué programa se abre este archivo, según su extensión."""
+    ext = os.path.splitext(archivo)[1].lower()
+    asign = CFG.get("asignaciones") or {}
+    if ext in asign:
+        clave = asign[ext]
+        # "sistema" = que lo abra Windows con lo que tenga por defecto
+        if not clave or clave == "sistema" or clave not in PROGRAMAS_DEF:
+            return "", ""
+        return clave, buscar_programa(clave)
+    for clave, d in PROGRAMAS_DEF.items():
+        if ext in d["exts"]:
+            return clave, buscar_programa(clave)
+    return "", ""
 
 
 def ruta_segura(p):
@@ -119,6 +174,8 @@ def modelo_vista(m, metas=None):
         "ruta_partes": partes,
         "fmt": m["formatos"], "gr": m["grosores"],
         "img": 1 if m["tiene_imagen"] else 0, "man": 1 if m["tiene_manual"] else 0,
+        # hay algo que mostrar: una foto, o la miniatura que trae el archivo de LightBurn
+        "prev": 1 if (m["tiene_imagen"] or m["tiene_lightburn"]) else 0,
         "lb": 1 if m["tiene_lightburn"] else 0, "d3": 1 if m["tiene_3d"] else 0,
         "fav": 1 if mt.get("favorito") else 0,
         "oculto": 1 if mt.get("oculto") else 0,
@@ -132,43 +189,146 @@ def modelo_vista(m, metas=None):
 def categorias_con_conteo(vistas):
     """Las 6 categorías grandes con sus subcategorías y cuántos modelos tiene cada una."""
     import categorias as cats
+    creadas, ocultas = db.subcats_propias()
     conteo, conteo_sub = {}, {}
     for v in vistas:
         conteo[v["c"]] = conteo.get(v["c"], 0) + 1
         conteo_sub[(v["c"], v["s"])] = conteo_sub.get((v["c"], v["s"]), 0) + 1
+
+    def visible(cat, sub, n):
+        if sub in (ocultas.get(cat) or []):
+            return False
+        # una subcategoría vacía se muestra solo si el usuario la creó
+        return n > 0 or sub in (creadas.get(cat) or [])
+
     salida = []
+    hechas = set()
     for grupo in cats.estructura():
         cat = grupo["nombre"]
-        subs = [{"nombre": s, "n": conteo_sub.get((cat, s), 0)} for s in grupo["subs"]]
-        # subcategorías que el usuario creó a mano al editar un modelo
-        for (c, s), n in conteo_sub.items():
-            if c == cat and s and s not in grupo["subs"]:
-                subs.append({"nombre": s, "n": n})
+        hechas.add(cat)
+        nombres = list(grupo["subs"])
+        for s in (creadas.get(cat) or []):
+            if s not in nombres:
+                nombres.append(s)
+        for (c, s), _ in conteo_sub.items():
+            if c == cat and s and s not in nombres:
+                nombres.append(s)
+        subs = [{"nombre": s, "n": conteo_sub.get((cat, s), 0), "propia": s not in grupo["subs"]}
+                for s in nombres]
         salida.append({"nombre": cat, "n": conteo.get(cat, 0),
-                       "subs": [s for s in subs if s["n"] > 0]})
+                       "subs": [s for s in subs if visible(cat, s["nombre"], s["n"])]})
     # categorías inventadas por el usuario
-    for c, n in conteo.items():
-        if c not in [g["nombre"] for g in salida]:
-            subs = [{"nombre": s, "n": k} for (cc, s), k in conteo_sub.items() if cc == c and s]
-            salida.append({"nombre": c, "n": n, "subs": subs})
-    return [g for g in salida if g["n"] > 0]
+    for c in list(conteo) + list(creadas):
+        if c in hechas:
+            continue
+        hechas.add(c)
+        nombres = list(creadas.get(c) or [])
+        for (cc, s), _ in conteo_sub.items():
+            if cc == c and s and s not in nombres:
+                nombres.append(s)
+        subs = [{"nombre": s, "n": conteo_sub.get((c, s), 0), "propia": True} for s in nombres]
+        salida.append({"nombre": c, "n": conteo.get(c, 0), "propia": True,
+                       "subs": [s for s in subs if visible(c, s["nombre"], s["n"])]})
+    # una categoría vacía solo se muestra si el usuario la creó
+    return [g for g in salida if g["n"] > 0 or g.get("subs")]
+
+
+def _la_pone_el_programa(cat, sub):
+    """¿Esta subcategoría sale sola al leer la carpeta? (porque la arma el
+    clasificador o porque existe como carpeta en el disco). Si es así hay que
+    taparla, si no volvería a aparecer en el próximo reindexado."""
+    return any(m["categoria"] == cat and m["subcategoria"] == sub for m in MODELOS)
+
+
+def modelos_en(cat, sub):
+    """Los modelos que hoy están en esa categoría/subcategoría."""
+    metas = db.meta_todos()
+    return [v for v in (modelo_vista(m, metas) for m in MODELOS)
+            if v["c"] == cat and (v["s"] or "") == (sub or "")]
+
+
+def renombrar_subcat(cat, vieja, nueva):
+    """Le cambia el nombre a una subcategoría y arrastra sus modelos."""
+    cat, vieja, nueva = (cat or "").strip(), (vieja or "").strip(), (nueva or "").strip()
+    if not cat or not vieja:
+        return {"error": "falta la subcategoría"}
+    if not nueva:
+        return {"error": "Escribe el nombre nuevo."}
+    if nueva == vieja:
+        return {"ok": True, "movidos": 0}
+    afectados = modelos_en(cat, vieja)
+    if len(afectados) > 20:
+        respaldar_base()      # por si se arrepiente después
+    for v in afectados:
+        db.guardar_meta(v["rel"], {"categoria": cat, "subcategoria": nueva})
+    db.quitar_subcat(cat, vieja)
+    db.crear_subcat(cat, nueva)
+    # si el nombre viejo sale solo al leer la carpeta, hay que taparlo
+    if _la_pone_el_programa(cat, vieja):
+        db.ocultar_subcat(cat, vieja, 1)
+    return {"ok": True, "movidos": len(afectados)}
+
+
+def borrar_subcat(cat, sub, destino=""):
+    """Saca una subcategoría. Sus modelos pasan a `destino` (o quedan sin subcategoría);
+    nunca se borra nada del disco."""
+    cat, sub = (cat or "").strip(), (sub or "").strip()
+    if not cat or not sub:
+        return {"error": "falta la subcategoría"}
+    destino = (destino or "").strip()
+    afectados = modelos_en(cat, sub)
+    if len(afectados) > 20:
+        respaldar_base()      # por si se arrepiente después
+    for v in afectados:
+        db.guardar_meta(v["rel"], {"categoria": cat, "subcategoria": destino})
+    db.quitar_subcat(cat, sub)
+    # Solo hay que taparla si la inventa el programa; si la creó el usuario,
+    # con quitarla basta y no dejamos basura guardada.
+    if _la_pone_el_programa(cat, sub):
+        db.ocultar_subcat(cat, sub, 1)
+    return {"ok": True, "movidos": len(afectados), "destino": destino}
+
+
+def vista_previa_lightburn(m):
+    """Los archivos de LightBurn traen una miniatura adentro. Si el modelo no
+    tiene ninguna foto, la usamos para que igual se vea algo."""
+    for a in (m.get("archivos", {}).get("corte") or []):
+        if a.lower().endswith((".lbrn", ".lbrn2")):
+            p = os.path.join(m["ruta"], a)
+            if os.path.exists(p):
+                return p
+    return None
 
 
 def miniatura(rel):
     m = POR_REL.get(rel)
-    if not m or not m.get("preview"):
+    if not m:
         return None
-    origen = os.path.join(m["ruta"], m["preview"])
-    if not os.path.exists(origen):
-        return None
+    origen = os.path.join(m["ruta"], m["preview"]) if m.get("preview") else ""
+    lbrn = None
+    if not origen or not os.path.exists(origen):
+        lbrn = vista_previa_lightburn(m)      # no hay foto: probamos con LightBurn
+        if not lbrn:
+            return None
+        origen = lbrn
     if not HAY_PIL:
+        if lbrn:
+            return None
         with open(origen, "rb") as f:
             return f.read(), mimetypes.guess_type(origen)[0] or "image/jpeg"
     h = hashlib.md5(rel.encode("utf-8")).hexdigest()
     destino = os.path.join(CACHE_THUMBS, h + ".jpg")
     try:
         if not os.path.exists(destino) or os.path.getmtime(destino) < os.path.getmtime(origen):
-            im = Image.open(origen).convert("RGB")
+            if lbrn:
+                import convertir
+                res = convertir.miniatura_lightburn(origen, destino + ".png")
+                if not res.get("ok"):
+                    return None
+                im = Image.open(destino + ".png").convert("RGB")
+                os.remove(destino + ".png")
+            else:
+                im = Image.open(origen).convert("RGB")
             im.thumbnail((520, 520), Image.LANCZOS)
             im.save(destino, "JPEG", quality=82)
     except Exception:
@@ -502,6 +662,65 @@ def cotizar(d):
     }
 
 
+def python_con_ventanas():
+    """pythonw no siempre puede abrir diálogos: preferimos python.exe."""
+    exe = sys.executable
+    alt = os.path.join(os.path.dirname(exe), "python.exe")
+    if os.path.basename(exe).lower().startswith("pythonw") and os.path.exists(alt):
+        return alt
+    return exe
+
+
+def elegir_programa(clave, ruta=None):
+    """Deja fija la ruta del .exe de un programa. Si no se pasa, abre el buscador."""
+    if clave not in PROGRAMAS_DEF:
+        return {"error": "programa desconocido"}
+    nombre = PROGRAMAS_DEF[clave]["nombre"]
+    if not ruta:
+        try:
+            r = subprocess.run([python_con_ventanas(),
+                                os.path.join(BASE, "elegir_carpeta.py"), "--exe", nombre],
+                               cwd=BASE, capture_output=True, text=True, timeout=300)
+            ruta = (r.stdout or "").strip()
+            if not ruta:
+                return {"error": "No elegiste ningún programa. Si no viste la ventana, "
+                                 "búscala en la barra de tareas o pega la ruta del .exe abajo."}
+        except Exception as e:
+            return {"error": "No pude abrir la ventana. Pega la ruta del .exe abajo.",
+                    "detalle": str(e)[:200]}
+
+    ruta = ruta.strip().strip('"').strip()
+    if not os.path.exists(ruta):
+        return {"error": "No encuentro ese archivo: %s" % ruta}
+    if not ruta.lower().endswith(".exe"):
+        return {"error": "Tiene que ser un programa (archivo .exe)."}
+
+    progs = CFG.get("programas") or {}
+    progs[clave] = ruta
+    CFG["programas"] = progs
+    guardar_config(CFG)
+    return {"ok": True, "nombre": nombre, "ruta": ruta}
+
+
+def asignar_extension(ext, clave):
+    """Elige con qué programa se abre una extensión (ej. .svg -> corel)."""
+    ext = (ext or "").strip().lower()
+    if not ext.startswith("."):
+        ext = "." + ext
+    if len(ext) < 2:
+        return {"error": "Escribe la extensión, por ejemplo .svg"}
+    if clave and clave not in PROGRAMAS_DEF and clave != "sistema":
+        return {"error": "programa desconocido"}
+    asign = CFG.get("asignaciones") or {}
+    if clave:
+        asign[ext] = clave
+    else:
+        asign.pop(ext, None)
+    CFG["asignaciones"] = asign
+    guardar_config(CFG)
+    return {"ok": True, "asignaciones": asign}
+
+
 def cambiar_carpeta(nueva=None):
     """Cambia la carpeta de modelos y vuelve a indexar.
     Si no se pasa ruta, abre el selector de carpetas de Windows."""
@@ -560,7 +779,34 @@ def exportar_datos():
         "pedidos": db.filas("SELECT * FROM pedidos"),
         "ventas": db.filas("SELECT * FROM ventas"),
         "sugerencias": db.sugerencias(),
+        # los costos y materiales que el usuario ajustó, y sus subcategorías
+        "materiales": db.filas("SELECT * FROM materiales"),
+        "costos_fijos": db.filas("SELECT * FROM costos_fijos"),
+        "ajustes": db.ajustes_todos(),
+        "subcats": db.filas("SELECT * FROM subcats"),
     }
+
+
+def respaldar_base():
+    """Copia segura de la base, aunque la app esté funcionando.
+    Copiar el archivo a mano NO sirve: SQLite deja cambios en biblioteca.db-wal
+    y la copia queda a medias."""
+    destino = os.path.join(BASE, "respaldos",
+                           "biblioteca-%s.db" % time.strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(os.path.dirname(destino), exist_ok=True)
+    try:
+        db.cx().execute("VACUUM INTO ?", (destino,))
+    except Exception as e:
+        return {"error": str(e)}
+    # dejamos solo los 10 respaldos más nuevos
+    carpeta = os.path.dirname(destino)
+    viejos = sorted(f for f in os.listdir(carpeta) if f.endswith(".db"))
+    for f in viejos[:-10]:
+        try:
+            os.remove(os.path.join(carpeta, f))
+        except OSError:
+            pass
+    return {"ok": True, "archivo": destino}
 
 
 def importar_datos(datos, modo="fusionar"):
@@ -601,6 +847,25 @@ def importar_datos(datos, modo="fusionar"):
             v["cliente_id"] = mapa_cli.get(v.get("cliente_id"), v.get("cliente_id"))
             db.guardar_venta(v)
             n["ventas"] += 1
+
+        # costos, materiales y ajustes: reemplazan a los actuales, porque son
+        # los valores con que el usuario cotiza (si no, quedarían duplicados)
+        if datos.get("materiales"):
+            c.execute("DELETE FROM materiales")
+        if datos.get("costos_fijos"):
+            c.execute("DELETE FROM costos_fijos")
+        for m in datos.get("materiales", []):
+            m = dict(m); m.pop("id", None)
+            db.guardar_material(m)
+            n["materiales"] = n.get("materiales", 0) + 1
+        for cf in datos.get("costos_fijos", []):
+            cf = dict(cf); cf.pop("id", None)
+            db.guardar_costo_fijo(cf)
+            n["costos"] = n.get("costos", 0) + 1
+        for k, v in (datos.get("ajustes") or {}).items():
+            db.guardar_ajuste(k, v)
+        for s in datos.get("subcats", []):
+            db.ocultar_subcat(s.get("categoria"), s.get("subcategoria"), s.get("oculta"))
         c.commit()
     except Exception as e:
         return {"error": str(e)}
@@ -759,6 +1024,16 @@ class Handler(BaseHTTPRequestHandler):
             d = dict(m)
             d["meta"] = db.meta(rel) or {}
             d["versiones"] = db.versiones(rel)
+            # con qué programa se abre cada archivo (por su extensión)
+            progs = {}
+            for grupo in (m.get("archivos") or {}).values():
+                for a in grupo:
+                    clave, exe = programa_para(a)
+                    if clave:
+                        progs[a] = {"clave": clave,
+                                    "nombre": PROGRAMAS_DEF[clave]["nombre"],
+                                    "instalado": bool(exe)}
+            d["programas"] = progs
             return self._send(200, d)
 
         if r == "/thumb":
@@ -781,15 +1056,34 @@ class Handler(BaseHTTPRequestHandler):
             if not ruta_segura(p) or not os.path.exists(p):
                 return self._send(403, {"error": "ruta no permitida"})
             try:
-                if modo == "lightburn":
-                    exe = buscar_lightburn()
+                # "auto" = con el programa que corresponde a ese tipo de archivo
+                if modo == "auto":
+                    modo = programa_para(p)[0]
+                if modo and modo != "sistema":
+                    exe = buscar_programa(modo)
                     if exe:
-                        subprocess.Popen([exe, p]); return self._send(200, {"ok": True, "con": "lightburn"})
-                    os.startfile(p); return self._send(200, {"ok": True, "con": "sistema"})
+                        subprocess.Popen([exe, p])
+                        return self._send(200, {"ok": True, "con": PROGRAMAS_DEF[modo]["nombre"]})
+                    nom = PROGRAMAS_DEF.get(modo, {}).get("nombre", modo)
+                    return self._send(404, {"error": "No encuentro %s en este computador. "
+                                            "Puedes indicar dónde está en ⚙️ Ajustes > Programas." % nom})
                 os.startfile(p)
-                return self._send(200, {"ok": True})
+                return self._send(200, {"ok": True, "con": "Windows"})
             except Exception as e:
                 return self._send(500, {"error": str(e)})
+
+        if r == "/api/programas":
+            return self._send(200, {"programas": programas_estado(),
+                                    "asignaciones": CFG.get("asignaciones") or {}})
+
+        if r == "/api/convertir/opciones":
+            import convertir
+            a = arg("f")
+            return self._send(200, {
+                "formatos": convertir.formatos_destino(a),
+                "motivo": convertir.por_que_no(a),
+                "inkscape": bool(buscar_programa("inkscape")),
+            })
 
         if r == "/api/carpeta":
             p = arg("p")
@@ -984,6 +1278,48 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/carpeta/cambiar":
             res = cambiar_carpeta(self._json().get("carpeta"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/programa":
+            d = self._json()
+            res = elegir_programa(d.get("clave", ""), d.get("ruta"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/programa/asignar":
+            d = self._json()
+            res = asignar_extension(d.get("ext", ""), d.get("clave", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/convertir":
+            import convertir
+            d = self._json()
+            p = d.get("p", "")
+            if not ruta_segura(p) or not os.path.exists(p):
+                return self._send(403, {"error": "ruta no permitida"})
+            res = convertir.convertir(p, d.get("formato", ""),
+                                      inkscape=buscar_programa("inkscape"))
+            if res.get("ok"):
+                db.registrar_version(d.get("rel", ""), "convertido",
+                                     os.path.basename(res["archivo"]), "")
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/subcategoria/crear":
+            d = self._json()
+            cat = (d.get("categoria") or "").strip()
+            nom = (d.get("nombre") or "").strip()
+            if not cat or not nom:
+                return self._send(400, {"error": "Elige la categoría y escribe el nombre."})
+            db.crear_subcat(cat, nom)
+            return self._send(200, {"ok": True, "categoria": cat, "nombre": nom})
+
+        if r == "/api/subcategoria/renombrar":
+            d = self._json()
+            res = renombrar_subcat(d.get("categoria"), d.get("vieja"), d.get("nueva"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/subcategoria/borrar":
+            d = self._json()
+            res = borrar_subcat(d.get("categoria"), d.get("nombre"), d.get("destino", ""))
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/borrar-archivo":

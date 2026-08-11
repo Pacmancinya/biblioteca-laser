@@ -1,6 +1,6 @@
 {
-  "version": "1.3",
-  "nombre": "Cotizador",
-  "novedades": "Calculadora de precios en cada modelo, con tus mismas fórmulas (costo por minuto, material por cm2, luz, mano de obra y utilidad). Tus costos y materiales se editan en Ajustes. Además: ya se puede cambiar la carpeta escribiendo o pegando la ruta, sin depender de la ventana.",
+  "version": "1.4",
+  "nombre": "Categorías y conversor",
+  "novedades": "Se arregló el orden de las categorías: los insectos ya no salen en Vehículos y ahora manda la forma en que tienes organizadas tus carpetas. Puedes crear, renombrar y sacar subcategorías desde Ajustes. Cada archivo se abre con su programa (los .lbrn en LightBurn, los .svg y .cdr en CorelDRAW) y en el botón ⋯ puedes elegir otro o convertirlo a otro formato. Además, los modelos de LightBurn que no tenían foto ahora muestran la vista previa que traen adentro.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

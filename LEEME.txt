@@ -57,13 +57,16 @@ leer los modelos. Tus favoritos, precios, clientes y ventas
 NO se pierden.
 
 
-LAS 5 SECCIONES (arriba)
-------------------------
+LAS SECCIONES (arriba)
+----------------------
 BIBLIOTECA -> todos tus modelos
 FAVORITOS  -> los que marcaste con la estrella
 CLIENTES   -> tus clientes, encargos y cobros
 VENTAS     -> lo que vendes en ferias o a clientes
 PANEL      -> resumen: cuanto vendiste, ganancia, por cobrar
+LIMPIEZA   -> repetidos, ocultos y papelera
+⚙️          -> ajustes: version, categorias, programas, costos,
+              respaldos y carpeta de modelos
 
 
 BUSCAR Y FILTRAR
@@ -79,16 +82,30 @@ BUSCAR Y FILTRAR
 
 AL HACER CLIC EN UN MODELO
 --------------------------
-Se abre su ficha con 4 pestanas:
+Se abre su ficha con estas pestanas:
 
 ARCHIVOS  -> los botones para abrir:
                Abrir en LightBurn / Ver manual / Ver imagen /
                Abrir carpeta. Abajo la lista completa de archivos.
 
+               Cada archivo se abre con el programa que le
+               corresponde: los .lbrn y .lbrn2 en LightBurn, y
+               los .svg, .cdr, .ai y .eps en CorelDRAW.
+               El boton dice a donde va ("LightBurn", "CorelDRAW").
+
+               El boton  ⋯  al lado sirve para:
+                 - abrirlo con OTRO programa (y dejarlo asi
+                   para siempre para ese tipo de archivo)
+                 - CONVERTIRLO a otro formato
+
 EDITAR    -> cambia el nombre, la categoria, notas, el costo,
              el precio de venta y el stock para ferias.
              OJO: esto se guarda SOLO en la app; tus carpetas y
              archivos NO se tocan nunca.
+
+COTIZAR   -> calcula el precio con tus formulas (material,
+             minutos de corte, luz, mano de obra y utilidad).
+             Los valores se ajustan en el engranaje.
 
 CARGAR    -> agrega o reemplaza el modelo, la imagen o el manual.
 ARCHIVOS     Se copian a la carpeta del modelo.
@@ -99,6 +116,48 @@ HISTORIAL -> si reemplazaste un archivo, aqui estan las versiones
              "_versiones_anteriores" dentro del modelo.
 
 La estrella (arriba a la izquierda de cada foto) marca favoritos.
+
+
+CATEGORIAS Y SUBCATEGORIAS
+--------------------------
+Engranaje -> "Categorias y subcategorias".
+
+Ahi puedes:
+  + Subcategoria  -> crear una nueva
+  ✎               -> cambiarle el nombre (los modelos se van con ella)
+  ✕               -> sacarla (te pregunta a que subcategoria pasan
+                     sus modelos; si lo dejas en blanco quedan sin
+                     subcategoria)
+
+Nada de esto borra archivos: solo cambia como se ordenan en la app.
+Y no se deshace solo cuando la app vuelve a leer tu carpeta.
+
+Tambien puedes crear una subcategoria desde la ficha de un modelo:
+pestana EDITAR -> boton  +  al lado de "Subcategoria".
+
+
+CONVERTIR ARCHIVOS
+------------------
+En la lista de archivos de un modelo, boton  ⋯  -> "Convertir a".
+
+Que se puede:
+  FOTOS (jpg, png, webp, bmp)  -> funciona de inmediato, sin
+                                  instalar nada.
+  DIBUJOS (svg, pdf, dxf, eps) -> necesitan INKSCAPE, que es
+                                  gratis: inkscape.org
+                                  Sin el, los botones salen
+                                  apagados y la app te avisa.
+  LIGHTBURN (.lbrn, .lbrn2)    -> saca la imagen de vista previa
+                                  que trae adentro el archivo.
+  CORELDRAW (.cdr)             -> NO se puede: es formato cerrado
+                                  de Corel. Hay que abrirlo en
+                                  CorelDRAW y usar Archivo->Exportar.
+
+Para llevar un dibujo A LightBurn no hace falta convertir nada:
+LightBurn importa svg, dxf, ai, pdf y png directamente.
+
+El archivo convertido se guarda en la misma carpeta del modelo,
+con el mismo nombre y la extension nueva. El original no se toca.
 
 
 CLIENTES Y COBROS
@@ -145,7 +204,15 @@ TUS DATOS
 ---------
 Todo lo que editas (favoritos, precios, clientes, ventas) se
 guarda en el archivo  biblioteca.db  de esta carpeta.
-Si quieres respaldarlo, copia ese archivo.
+
+PARA RESPALDARLO usa:
+   Engranaje -> "Descargar respaldo"
+Eso guarda un archivo con todo (favoritos, nombres, categorias,
+precios, clientes, ventas, costos y materiales) que despues
+puedes volver a cargar con "Cargar respaldo".
+
+NO copies el archivo biblioteca.db con la app abierta: queda a
+medias y se daña. Usa siempre el boton de respaldo.
 
 La biblioteca solo LEE tus modelos. No mueve ni borra nada.
 Lo unico que escribe es cuando TU cargas un archivo nuevo.
