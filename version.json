@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
-  "novedades": "Tema claro y oscuro · Cambiar la carpeta de modelos desde la app · Quitar modelos de la biblioteca sin borrarlos del computador · Burbuja para anotar ideas y mandarlas por WhatsApp.",
+  "version": "1.1.2",
+  "novedades": "Ahora los botones de manual y foto aparecen siempre: si el modelo no los tiene, salen apagados con 'No se encontró' y sirven para agregarlos.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

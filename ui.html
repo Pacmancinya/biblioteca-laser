@@ -201,6 +201,10 @@
   .acc.pri:hover{background:var(--amb2)}
   .acc small{display:block;font-family:var(--fb);font-weight:400;font-size:11px;color:var(--tx3);margin-top:1px}
   .acc.pri small{color:rgba(20,18,15,.6)}
+  .acc.vacio{background:transparent;border-style:dashed;color:var(--tx3)}
+  .acc.vacio svg{opacity:.6}
+  .acc.vacio:hover{border-color:var(--amb);border-style:solid;color:var(--tx2);background:var(--panel2)}
+  .acc.vacio small{color:var(--tx3)}
   .secc{margin-bottom:16px}
   .secc h4{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3);margin:0 0 7px}
   .arch{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:9px;border:1px solid var(--line);margin-bottom:5px;background:var(--panel2)}
@@ -665,9 +669,21 @@ function abrirModelo(rel){
     } else prev.innerHTML=SINIMG;
     var corte=m.archivos.corte||[], lb=corte.filter(function(f){return /\.lbrn2?$/i.test(f)});
     var pri=lb[0]||corte[0], a=[];
+    // Los botones SIEMPRE aparecen. Si no hay archivo, quedan apagados
+    // y sirven para agregarlo.
     if(pri) a.push('<button class="acc pri" data-act="lightburn" data-f="'+esc(pri)+'"><svg viewBox="0 0 24 24" fill="#14120F"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>Abrir en LightBurn<small>'+esc(pri)+'</small></span></button>');
-    if((m.archivos.manual||[]).length) a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.archivos.manual[0])+'"><svg viewBox="0 0 24 24" fill="none" stroke="#E0654F" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/></svg><span>Ver manual<small>'+esc(m.archivos.manual[0])+'</small></span></button>');
-    if(m.preview) a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.preview)+'"><svg viewBox="0 0 24 24" fill="none" stroke="#5FA8D3" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/></svg><span>Ver imagen</span></button>');
+    else a.push('<button class="acc vacio" data-falta="modelo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>Sin archivo para cortar<small>No se encontró · toca para agregar uno</small></span></button>');
+
+    if((m.archivos.manual||[]).length)
+      a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.archivos.manual[0])+'"><svg viewBox="0 0 24 24" fill="none" stroke="#E0654F" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/></svg><span>Ver manual<small>'+esc(m.archivos.manual[0])+'</small></span></button>');
+    else
+      a.push('<button class="acc vacio" data-falta="manual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/></svg><span>Sin manual de armado<small>No se encontró · toca para agregar uno</small></span></button>');
+
+    if(m.preview)
+      a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.preview)+'"><svg viewBox="0 0 24 24" fill="none" stroke="#5FA8D3" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/></svg><span>Ver imagen</span></button>');
+    else
+      a.push('<button class="acc vacio" data-falta="imagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/><circle cx="8.5" cy="8.5" r="1.5"/></svg><span>Sin foto<small>No se encontró · toca para agregar una</small></span></button>');
+
     a.push('<button class="acc" data-act="carpeta"><svg viewBox="0 0 24 24" fill="none" stroke="#E8A33D" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"/></svg><span>Abrir carpeta</span></button>');
     document.getElementById('dAcc').innerHTML=a.join('');
     // archivos
@@ -812,6 +828,15 @@ document.getElementById('velo').addEventListener('click',function(e){
     if(!confirm('¿Enviar "'+f+'" a la papelera?\n\nPodrás recuperarlo desde Limpieza → Papelera.')) return;
     api('/api/borrar-archivo',{rel:actual.rel,nombre:f}).then(function(r){
       if(r.ok){toast('Enviado a la papelera');abrirModelo(actual.rel);cargar()} else toast(r.error||'No se pudo',true)});
+    return;
+  }
+  // botones apagados (no hay ese archivo): llevan a la pestaña para agregarlo
+  var fa=e.target.closest('[data-falta]');
+  if(fa){
+    document.querySelector('.mtab[data-p="cargar"]').click();
+    var z=document.querySelector('#p-cargar .zona[data-tipo="'+fa.dataset.falta+'"]');
+    if(z){ z.classList.add('drag'); z.scrollIntoView({block:'center'});
+           setTimeout(function(){z.classList.remove('drag')},1400); }
     return;
   }
   var b=e.target.closest('[data-act]'); if(!b||!actual) return;
