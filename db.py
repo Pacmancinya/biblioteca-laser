@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS modelos (
   subcategoria TEXT,
   notas        TEXT,
   favorito     INTEGER DEFAULT 0,
+  oculto       INTEGER DEFAULT 0,
   costo        REAL,
   precio       REAL,
   stock        INTEGER DEFAULT 0,
@@ -92,6 +93,13 @@ CREATE TABLE IF NOT EXISTS papelera (
   fecha   INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS sugerencias (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  texto  TEXT,
+  fecha  INTEGER,
+  enviada INTEGER DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS huellas (
   ruta  TEXT PRIMARY KEY,
   tam   INTEGER,
@@ -113,6 +121,19 @@ def conectar():
     return cx
 
 
+def migrar(cx):
+    """Agrega columnas nuevas a bases creadas por versiones anteriores."""
+    faltantes = {"oculto": "INTEGER DEFAULT 0"}
+    existentes = {r[1] for r in cx.execute("PRAGMA table_info(modelos)").fetchall()}
+    for col, tipo in faltantes.items():
+        if col not in existentes:
+            try:
+                cx.execute(f"ALTER TABLE modelos ADD COLUMN {col} {tipo}")
+            except sqlite3.OperationalError:
+                pass
+    cx.commit()
+
+
 _CX = None
 def cx():
     global _CX
@@ -120,6 +141,7 @@ def cx():
         _CX = conectar()
         _CX.executescript(ESQUEMA)
         _CX.commit()
+        migrar(_CX)
     return _CX
 
 
@@ -147,7 +169,7 @@ def meta(rel):
 def guardar_meta(rel, campos):
     """Crea o actualiza los metadatos de un modelo."""
     permitidos = {"nombre", "categoria", "subcategoria", "notas", "favorito",
-                  "costo", "precio", "stock", "cliente_id"}
+                  "costo", "precio", "stock", "cliente_id", "oculto"}
     campos = {k: v for k, v in campos.items() if k in permitidos}
     if not campos:
         return
@@ -156,6 +178,16 @@ def guardar_meta(rel, campos):
     sets = ", ".join(f"{k}=?" for k in campos)
     vals = list(campos.values()) + [int(time.time()), rel]
     ejecutar(f"UPDATE modelos SET {sets}, actualizado=? WHERE rel=?", vals)
+
+def alternar_oculto(rel):
+    m = meta(rel)
+    nuevo = 0 if (m and m.get("oculto")) else 1
+    guardar_meta(rel, {"oculto": nuevo})
+    return nuevo
+
+def ocultos():
+    return filas("SELECT rel, nombre FROM modelos WHERE oculto=1")
+
 
 def alternar_favorito(rel):
     m = meta(rel)
@@ -313,6 +345,21 @@ def item_papelera(pid):
 
 def quitar_de_papelera(pid):
     ejecutar("DELETE FROM papelera WHERE id=?", (pid,))
+
+
+# ---------------------------------------------------------------- sugerencias
+def sugerencias():
+    return filas("SELECT * FROM sugerencias ORDER BY fecha DESC")
+
+def agregar_sugerencia(texto):
+    return ejecutar("INSERT INTO sugerencias (texto,fecha,enviada) VALUES (?,?,0)",
+                    (texto, int(time.time())))
+
+def borrar_sugerencia(sid):
+    ejecutar("DELETE FROM sugerencias WHERE id=?", (sid,))
+
+def marcar_enviadas():
+    ejecutar("UPDATE sugerencias SET enviada=1")
 
 
 # ---------------------------------------------------------------- huellas (caché)

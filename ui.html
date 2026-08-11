@@ -13,7 +13,29 @@
     --fd:"Bahnschrift","Segoe UI Semibold","Segoe UI",system-ui,sans-serif;
     --fb:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
     --fm:"Consolas",ui-monospace,monospace;
+    --sombra:rgba(0,0,0,.55);
   }
+  /* ---------- tema claro ---------- */
+  html[data-tema="claro"]{
+    --bg:#F5F1E8; --panel:#FFFFFF; --panel2:#F2EDE3; --panel3:#E9E2D4; --line:#DED5C5;
+    --tx:#1D1913; --tx2:#5C5347; --tx3:#8B8175;
+    --amb:#C8801D; --amb2:#9C6210; --amb-dim:#FBEFD9;
+    --ok:#2E7D32; --info:#1C6E9C; --rojo:#C43D26; --violeta:#7B4FA8;
+    --sombra:rgba(90,75,50,.22);
+  }
+  html[data-tema="claro"] .card:hover{box-shadow:0 14px 30px -16px var(--sombra)}
+  html[data-tema="claro"] .estrella{background:rgba(255,255,255,.82)}
+  html[data-tema="claro"] .estrella svg{stroke:#5C5347}
+  html[data-tema="claro"] .estrella.on svg{fill:var(--amb);stroke:var(--amb)}
+  html[data-tema="claro"] .cat-b.on,html[data-tema="claro"] .tab.on,
+  html[data-tema="claro"] .btn.pri,html[data-tema="claro"] .acc.pri{color:#fff}
+  html[data-tema="claro"] .cat-b.on .n{color:rgba(255,255,255,.8)}
+  html[data-tema="claro"] .acc.pri small{color:rgba(255,255,255,.75)}
+  html[data-tema="claro"] .acc.pri svg{fill:#fff}
+  html[data-tema="claro"] .logo .ic svg{fill:#fff}
+  html[data-tema="claro"] .velo{background:rgba(60,50,35,.45)}
+  html[data-tema="claro"] ::-webkit-scrollbar-thumb{background:#CFC4B0}
+  html[data-tema="claro"] .arch button{background:var(--amb-dim);color:var(--amb2)}
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--fb);font-size:15px;line-height:1.5;overflow:hidden}
@@ -199,6 +221,30 @@
   .zona{border:2px dashed var(--line);border-radius:11px;padding:16px;text-align:center;color:var(--tx3);cursor:pointer;font-size:13px;transition:.15s}
   .zona:hover,.zona.drag{border-color:var(--amb);color:var(--amb2);background:var(--amb-dim)}
 
+  /* burbuja de ideas */
+  .burbuja{position:fixed;right:22px;bottom:22px;z-index:70;width:54px;height:54px;border-radius:50%;
+    background:var(--amb);color:#14120F;border:none;font-size:24px;cursor:pointer;
+    box-shadow:0 8px 24px -6px var(--sombra);transition:transform .15s}
+  .burbuja:hover{transform:scale(1.08)}
+  .burbuja .pun{position:absolute;top:2px;right:2px;background:var(--rojo);color:#fff;border-radius:99px;
+    min-width:19px;height:19px;font-size:11px;font-family:var(--fm);display:none;align-items:center;justify-content:center;padding:0 5px}
+  .burbuja .pun.on{display:flex}
+  .panel-ideas{position:fixed;right:22px;bottom:86px;z-index:71;width:360px;max-width:92vw;max-height:70vh;
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;display:none;flex-direction:column;
+    overflow:hidden;box-shadow:0 18px 44px -12px var(--sombra)}
+  .panel-ideas.on{display:flex}
+  .pi-head{display:flex;justify-content:space-between;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .pi-head b{font-family:var(--fd);font-size:15px}
+  .pi-head small{color:var(--tx3);font-size:11.5px}
+  .pi-body{padding:13px 15px;overflow-y:auto;flex:1}
+  .pi-body textarea{min-height:80px}
+  .pi-foot{display:flex;gap:8px;padding:11px 15px;border-top:1px solid var(--line);background:var(--panel2)}
+  .pi-foot .btn{flex:1;justify-content:center}
+  .idea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px}
+  .idea .f{font-family:var(--fm);font-size:10px;color:var(--tx3);display:flex;justify-content:space-between;margin-bottom:4px}
+  .idea .f button{background:none;border:none;color:var(--tx3);cursor:pointer;font-size:13px;padding:0 3px}
+  .idea .f button:hover{color:var(--rojo)}
+
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--panel3);border:1px solid var(--amb);color:var(--tx);padding:11px 21px;border-radius:99px;font-family:var(--fd);font-size:13.5px;opacity:0;transition:.24s;z-index:90;pointer-events:none;max-width:80vw;text-align:center}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.err{border-color:var(--rojo)}
@@ -232,6 +278,7 @@
     <button class="x" id="qx">&times;</button>
   </div>
   <div class="cuenta" id="cuenta"></div>
+  <button class="btn mini" id="btnTema" title="Cambiar entre claro y oscuro" style="flex:none">🌙</button>
 </div>
 
 <div class="cuerpo">
@@ -289,8 +336,10 @@
       <div class="barra">
         <button class="btn pri" id="buscarDup">Buscar repetidos</button>
         <button class="btn" id="verPapelera">Ver papelera</button>
+        <button class="btn" id="verOcultosBtn">Ver ocultos</button>
       </div>
       <div id="dupCont"></div>
+      <div id="ocuCont"></div>
       <div id="papCont"></div>
     </div>
 
@@ -325,9 +374,11 @@
         <p class="sub" id="rutaTxt">—</p>
         <div class="barra">
           <button class="btn" id="btnReindexar">Buscar modelos nuevos</button>
+          <button class="btn pri" id="btnCambiarCarpeta">📁 Cambiar carpeta</button>
         </div>
-        <p class="sub" style="margin:0">Para cambiar de carpeta, cierra la app y usa
-        “Cambiar carpeta de modelos.bat”.</p>
+        <p class="sub" style="margin:0">Al cambiar de carpeta se vuelven a leer los modelos.
+        Tus favoritos, precios, clientes y ventas <b>no se pierden</b>.</p>
+        <div id="carpetaCont"></div>
       </div>
     </div>
 
@@ -360,8 +411,8 @@
       <div class="mpanel" id="p-versiones"></div>
     </div>
     <div class="mf">
-      <button class="btn del" id="dBorrarModelo">🗑 Eliminar este modelo</button>
-      <span style="color:var(--tx3);font-size:12px;align-self:center">Lo borrado va a la papelera, se puede recuperar</span>
+      <button class="btn" id="dOcultar">🙈 Quitar de la biblioteca</button>
+      <button class="btn del" id="dBorrarModelo">🗑 Eliminar del computador</button>
     </div>
   </div>
 </div>
@@ -375,14 +426,44 @@
   </div>
 </div>
 
+<!-- burbuja de ideas / cambios -->
+<button class="burbuja" id="burbuja" title="Anotar algo que te gustaría cambiar">💬<span class="pun" id="burbujaPun"></span></button>
+<div class="panel-ideas" id="panelIdeas">
+  <div class="pi-head">
+    <div><b>Mis ideas y cambios</b><br><small>Anota lo que te gustaría que la app hiciera. Ruperto lo va a leer.</small></div>
+    <button class="xb" id="ideasCerrar">&times;</button>
+  </div>
+  <div class="pi-body">
+    <textarea id="ideaTxt" placeholder="Ejemplo: me gustaría poder ordenar los modelos por fecha, o que las fotos se vean más grandes..."></textarea>
+    <button class="btn pri" id="ideaGuardar" style="width:100%;margin-top:8px">Guardar idea</button>
+    <div id="ideasLista"></div>
+  </div>
+  <div class="pi-foot">
+    <button class="btn mini" id="ideasCopiar">📋 Copiar todo</button>
+    <button class="btn mini pri" id="ideasWhats">Enviar por WhatsApp</button>
+  </div>
+</div>
+
 <div class="lupa-full" id="lupaFull"><img id="lupaImg" src="" alt=""></div>
 <div class="toast" id="toast"></div>
 
 <script>
 var D=null, MODELOS=[], CLIENTES=[], PEDIDOS=[], VENTAS=[];
 var filtrados=[], mostrados=0, LOTE=60, actual=null;
-var st={q:"",cat:"",sub:"",flags:{},fmt:"",gr:"",vista:"biblio"};
+var st={q:"",cat:"",sub:"",flags:{},fmt:"",gr:"",vista:"biblio",verOcultos:false};
 var qEl=document.getElementById('q'), grid=document.getElementById('grid');
+
+// ---------------- tema claro / oscuro ----------------
+function aplicarTema(t){
+  document.documentElement.setAttribute('data-tema', t);
+  var b=document.getElementById('btnTema');
+  if(b){ b.textContent = (t==='claro'?'🌙':'☀️'); b.title = (t==='claro'?'Cambiar a oscuro':'Cambiar a claro'); }
+  try{ localStorage.setItem('tema', t); }catch(e){}
+}
+(function(){ var t='oscuro'; try{ t=localStorage.getItem('tema')||'oscuro'; }catch(e){} aplicarTema(t); })();
+document.getElementById('btnTema').addEventListener('click',function(){
+  aplicarTema(document.documentElement.getAttribute('data-tema')==='claro'?'oscuro':'claro');
+});
 
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function norm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')}
@@ -493,6 +574,8 @@ function limpiarFiltros(){
 function aplicar(){
   var q=norm(st.q).split(/\s+/).filter(Boolean);
   filtrados=MODELOS.filter(function(m){
+    if(m.oculto && !st.verOcultos) return false;
+    if(st.verOcultos && !m.oculto) return false;
     if(st.vista==='fav' && !m.fav) return false;
     if(st.cat && m.c!==st.cat) return false;
     if(st.sub && m.s!==st.sub) return false;
@@ -597,6 +680,8 @@ function abrirModelo(rel){
           +'<button class="bx" data-borrar="'+esc(f)+'" title="Enviar a la papelera">🗑</button></div>'});
       h+='</div>'});
     document.getElementById('dArch').innerHTML=h;
+    var bo=document.getElementById('dOcultar');
+    bo.textContent = v.oculto ? '👁 Volver a mostrar' : '🙈 Quitar de la biblioteca';
     panelEditar(m,v); panelCargar(m); panelVersiones(m);
     document.querySelector('.mtab[data-p="archivos"]').click();
     document.getElementById('velo').classList.add('on');
@@ -608,10 +693,24 @@ document.getElementById('mtabs').addEventListener('click',function(e){
   ['archivos','editar','cargar','versiones'].forEach(function(p){document.getElementById('p-'+p).classList.toggle('on',p===b.dataset.p)});
 });
 document.getElementById('dCerrar').addEventListener('click',function(){document.getElementById('velo').classList.remove('on')});
+document.getElementById('dOcultar').addEventListener('click',function(){
+  if(!actual) return;
+  var v=MODELOS.find(function(x){return x.rel===actual.rel})||{};
+  var msg = v.oculto
+    ? '¿Volver a mostrar este modelo en la biblioteca?'
+    : '¿Quitar este modelo de la biblioteca?\n\nSolo se esconde de la app: los archivos NO se borran de tu computador.\nPuedes volver a mostrarlo desde Limpieza → Ocultos.';
+  if(!confirm(msg)) return;
+  api('/api/ocultar',{rel:actual.rel}).then(function(r){
+    if(!r.ok) return toast(r.error||'No se pudo',true);
+    toast(r.oculto?'Quitado de la biblioteca (sigue en tu PC)':'Vuelve a estar visible');
+    document.getElementById('velo').classList.remove('on');
+    cargar().then(function(){aplicar()});
+  });
+});
 document.getElementById('dBorrarModelo').addEventListener('click',function(){
   if(!actual) return;
   var nom=document.getElementById('dTit').textContent;
-  if(!confirm('¿Eliminar el modelo "'+nom+'" completo?\n\nSe manda toda la carpeta a la papelera y podrás recuperarla desde Limpieza → Papelera.')) return;
+  if(!confirm('¿ELIMINAR "'+nom+'" de tu computador?\n\nSe mueve toda la carpeta a la papelera de la app.\nSi solo quieres que no aparezca, usa "Quitar de la biblioteca".')) return;
   api('/api/borrar-modelo',{rel:actual.rel}).then(function(r){
     if(r.ok){ toast('Modelo enviado a la papelera'); document.getElementById('velo').classList.remove('on');
       cargar().then(function(){aplicar()}); }
@@ -656,6 +755,19 @@ function pintarDupLote(){
            b.style.display = fin>=g.length ? 'none' : ''; }
 }
 document.getElementById('verPapelera').onclick=function(){ verPapelera(); };
+document.getElementById('verOcultosBtn').onclick=function(){ verOcultos(); };
+function verOcultos(){
+  api('/api/ocultos').then(function(r){
+    var it=r.items||[];
+    document.getElementById('ocuCont').innerHTML='<div class="caja"><h4>Quitados de la biblioteca ('+it.length+')</h4>'
+      +'<p class="sub">Estos modelos no aparecen en la biblioteca, pero <b>siguen en tu computador</b>, en su carpeta de siempre.</p>'
+      +(it.length?'<table><tr><th>Modelo</th><th>Dónde está</th><th></th></tr>'
+        +it.map(function(x){return '<tr><td><b>'+esc(x.nombre)+'</b></td>'
+          +'<td><small style="color:var(--tx3)">'+esc(x.ruta)+'</small></td>'
+          +'<td><button class="btn mini" data-mostrar="'+esc(x.rel)+'">Volver a mostrar</button></td></tr>'}).join('')+'</table>'
+        : '<p class="sub">No has quitado ningún modelo.</p>')+'</div>';
+  });
+}
 function verPapelera(){
   api('/api/papelera').then(function(r){
     var it=r.items||[];
@@ -679,6 +791,9 @@ document.getElementById('v-limpieza').addEventListener('click',function(e){
         cargar(); verPapelera(); } else toast(r.error||'No se pudo',true) });
     return;
   }
+  var mo=e.target.closest('[data-mostrar]');
+  if(mo){ api('/api/ocultar',{rel:mo.dataset.mostrar}).then(function(r){
+      toast('Vuelve a estar visible'); verOcultos(); cargar().then(function(){aplicar()}) }); return; }
   var re=e.target.closest('[data-restaurar]');
   if(re){ api('/api/papelera/restaurar',{id:+re.dataset.restaurar}).then(function(r){
       if(r.ok){ toast('Recuperado'); verPapelera(); if(r.tipo==='modelo') api('/api/reindexar').then(function(){cargar()}); else cargar(); }
@@ -922,6 +1037,18 @@ document.getElementById('fileImportar').onchange=function(){
   };
   lector.readAsText(f); this.value='';
 };
+document.getElementById('btnCambiarCarpeta').onclick=function(){
+  var b=this, c=document.getElementById('carpetaCont');
+  b.disabled=true; b.textContent='Elige la carpeta...';
+  c.innerHTML='<p class="sub">Se abrió una ventana para elegir la carpeta. Si no la ves, búscala en la barra de tareas.</p>';
+  api('/api/carpeta/cambiar',{}).then(function(r){
+    b.disabled=false; b.textContent='📁 Cambiar carpeta';
+    if(r.ok){ c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo: '+r.total.toLocaleString('es-CL')+' modelos en la carpeta nueva.</p>';
+      toast('Carpeta cambiada'); cargar().then(function(){ verAjustes(); aplicar(); }); }
+    else c.innerHTML='<p class="sub" style="color:var(--rojo)">'+esc(r.error||'No se pudo')+'</p>';
+  }).catch(function(){ b.disabled=false; b.textContent='📁 Cambiar carpeta';
+    c.innerHTML='<p class="sub" style="color:var(--rojo)">No se pudo cambiar la carpeta.</p>'; });
+};
 document.getElementById('btnReindexar').onclick=function(){
   var b=this; b.textContent='Buscando...'; b.disabled=true;
   api('/api/reindexar',{}).then(function(r){
@@ -1009,6 +1136,68 @@ function formVenta(v){
         .then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta registrada');cargar()}) },
     v.id?function(){api('/api/venta/borrar',{id:v.id}).then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta eliminada')})}:null);
 }
+
+// ---------------- burbuja de ideas ----------------
+var IDEAS=[], WHATS='';
+function verIdeas(){
+  api('/api/sugerencias').then(function(r){
+    IDEAS=r.items||[]; WHATS=r.whatsapp||'';
+    var p=document.getElementById('burbujaPun');
+    p.textContent=IDEAS.length; p.className='pun'+(IDEAS.length?' on':'');
+    document.getElementById('ideasLista').innerHTML = IDEAS.length
+      ? '<div style="font-family:var(--fm);font-size:10px;color:var(--tx3);margin-top:14px;text-transform:uppercase;letter-spacing:.08em">Ya anotaste ('+IDEAS.length+')</div>'
+        + IDEAS.map(function(x){ return '<div class="idea"><div class="f"><span>'+fech(x.fecha)+(x.enviada?' · enviada':'')+'</span>'
+          + '<button data-idea="'+x.id+'" title="Borrar">🗑</button></div>'+esc(x.texto).replace(/\n/g,'<br>')+'</div>' }).join('')
+      : '<p class="sub" style="margin-top:14px">Todavía no anotaste nada.</p>';
+  });
+}
+document.getElementById('burbuja').addEventListener('click',function(){
+  var p=document.getElementById('panelIdeas');
+  p.classList.toggle('on');
+  if(p.classList.contains('on')){ verIdeas(); document.getElementById('ideaTxt').focus(); }
+});
+document.getElementById('ideasCerrar').onclick=function(){document.getElementById('panelIdeas').classList.remove('on')};
+document.getElementById('ideaGuardar').onclick=function(){
+  var t=document.getElementById('ideaTxt');
+  if(!t.value.trim()) return toast('Escribe tu idea primero',true);
+  api('/api/sugerencia',{texto:t.value}).then(function(r){
+    if(r.ok){ t.value=''; toast('¡Anotado! Gracias 👍'); verIdeas(); }
+    else toast(r.error||'No se pudo guardar',true);
+  });
+};
+document.getElementById('ideasLista').addEventListener('click',function(e){
+  var b=e.target.closest('[data-idea]'); if(!b) return;
+  if(!confirm('¿Borrar esta idea?')) return;
+  api('/api/sugerencia/borrar',{id:+b.dataset.idea}).then(function(){ verIdeas() });
+});
+function textoIdeas(){
+  return 'Ideas para la Biblioteca Láser:\n\n' + IDEAS.map(function(x,i){
+    return (i+1)+'. '+x.texto+'  ('+fech(x.fecha)+')' }).join('\n\n');
+}
+document.getElementById('ideasCopiar').onclick=function(){
+  if(!IDEAS.length) return toast('No hay nada anotado',true);
+  var t=textoIdeas();
+  if(navigator.clipboard) navigator.clipboard.writeText(t).then(function(){toast('Copiado, ya puedes pegarlo')},function(){pegarManual(t)});
+  else pegarManual(t);
+};
+function pegarManual(t){
+  var a=document.createElement('textarea'); a.value=t; document.body.appendChild(a); a.select();
+  try{ document.execCommand('copy'); toast('Copiado'); }catch(e){ toast('Copia el texto a mano',true); }
+  a.remove();
+}
+document.getElementById('ideasWhats').onclick=function(){
+  if(!IDEAS.length) return toast('No hay nada anotado',true);
+  var num=WHATS;
+  if(!num){
+    num=prompt('¿A qué número de WhatsApp se las mando?\n(Ejemplo: 56912345678)','');
+    if(!num) return;
+    num=num.replace(/[^0-9]/g,'');
+    api('/api/config/whatsapp',{numero:num}).then(function(){WHATS=num});
+  }
+  window.open('https://wa.me/'+num+'?text='+encodeURIComponent(textoIdeas()),'_blank');
+  api('/api/sugerencia/enviadas',{}).then(function(){ verIdeas() });
+};
+verIdeas();
 
 document.getElementById('lupaFull').addEventListener('click',function(){this.classList.remove('on')});
 document.addEventListener('keydown',function(e){

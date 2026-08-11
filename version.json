@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
-  "novedades": "Arreglado el instalador: ahora instala Python correctamente en PCs que no lo tienen y ya no se confunde con el alias de Microsoft Store.",
+  "version": "1.1.0",
+  "novedades": "Tema claro y oscuro · Cambiar la carpeta de modelos desde la app · Quitar modelos de la biblioteca sin borrarlos del computador · Burbuja para anotar ideas y mandarlas por WhatsApp.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

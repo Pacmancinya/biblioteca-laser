@@ -14,6 +14,49 @@ Se abre una ventana negra (dejala abierta) y la biblioteca se
 abre en el navegador. Para cerrar: cierra la ventana negra.
 
 
+ANOTAR IDEAS Y CAMBIOS  (burbuja 💬 abajo a la derecha)
+------------------------------------------------------
+Si se te ocurre algo que te gustaria que la app hiciera
+distinto, aprieta la burbuja 💬 y escribelo. Queda guardado
+con la fecha.
+
+Cuando quieras mandarselas a Ruperto:
+   "Enviar por WhatsApp"  -> abre WhatsApp con todas tus notas
+   "Copiar todo"          -> las copia para pegarlas donde sea
+
+No necesitas mandarlas de a una: escribe cuando se te ocurra
+y las mandas todas juntas cuando quieras.
+
+
+TEMA CLARO U OSCURO
+-------------------
+Boton  ☀️ / 🌙  arriba a la derecha. Queda guardado para
+la proxima vez que abras.
+
+
+QUITAR UN MODELO vs ELIMINARLO
+------------------------------
+En la ficha de un modelo, abajo, hay dos botones distintos:
+
+  🙈 QUITAR DE LA BIBLIOTECA
+     Solo lo esconde de la app. Los archivos SIGUEN en tu
+     computador, en su carpeta de siempre. Sirve para limpiar
+     la vista de cosas que no usas.
+     Para recuperarlo: Limpieza -> "Ver ocultos".
+
+  🗑 ELIMINAR DEL COMPUTADOR
+     Manda la carpeta del modelo a la papelera de la app.
+     Para recuperarlo: Limpieza -> "Ver papelera".
+
+
+CAMBIAR LA CARPETA DE MODELOS
+-----------------------------
+Boton del engranaje (arriba a la derecha) -> "Cambiar carpeta".
+Se abre una ventana para elegir la carpeta nueva y vuelve a
+leer los modelos. Tus favoritos, precios, clientes y ventas
+NO se pierden.
+
+
 LAS 5 SECCIONES (arriba)
 ------------------------
 BIBLIOTECA -> todos tus modelos

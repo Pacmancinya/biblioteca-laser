@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.1.0"
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 
@@ -118,6 +118,7 @@ def modelo_vista(m, metas=None):
         "img": 1 if m["tiene_imagen"] else 0, "man": 1 if m["tiene_manual"] else 0,
         "lb": 1 if m["tiene_lightburn"] else 0, "d3": 1 if m["tiene_3d"] else 0,
         "fav": 1 if mt.get("favorito") else 0,
+        "oculto": 1 if mt.get("oculto") else 0,
         "costo": mt.get("costo"), "precio": mt.get("precio"), "stock": mt.get("stock") or 0,
         "cliente_id": mt.get("cliente_id"),
         "notas": mt.get("notas") or "",
@@ -423,6 +424,35 @@ def buscar_duplicados():
 # ---------------------------------------------------------------- respaldo de datos
 ARCHIVOS_CODIGO = ["app.py", "db.py", "indexar.py", "categorias.py", "ui.html"]
 
+def cambiar_carpeta(nueva=None):
+    """Cambia la carpeta de modelos y vuelve a indexar.
+    Si no se pasa ruta, abre el selector de carpetas de Windows."""
+    if not nueva:
+        try:
+            r = subprocess.run([sys.executable, os.path.join(BASE, "elegir_carpeta.py")],
+                               cwd=BASE, capture_output=True, text=True, timeout=300)
+            nueva = (r.stdout or "").strip().splitlines()[-1].strip() if r.stdout.strip() else ""
+        except Exception as e:
+            return {"error": f"no se pudo abrir el selector: {e}"}
+    if not nueva:
+        return {"error": "no se eligió ninguna carpeta"}
+    if not os.path.isdir(nueva):
+        return {"error": "esa carpeta no existe"}
+
+    cfg = cargar_config()
+    cfg["biblioteca"] = nueva
+    guardar_config(cfg)
+    try:
+        r = subprocess.run([sys.executable, os.path.join(BASE, "indexar.py"), nueva],
+                           cwd=BASE, capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            return {"error": "no pude leer esa carpeta"}
+    except Exception as e:
+        return {"error": str(e)}
+    recargar_indice()
+    return {"ok": True, "carpeta": RAIZ, "total": len(MODELOS)}
+
+
 def exportar_datos():
     """Todo lo que el usuario editó, en un solo archivo para llevarlo a otro PC."""
     return {
@@ -432,6 +462,7 @@ def exportar_datos():
         "clientes": db.filas("SELECT * FROM clientes"),
         "pedidos": db.filas("SELECT * FROM pedidos"),
         "ventas": db.filas("SELECT * FROM ventas"),
+        "sugerencias": db.sugerencias(),
     }
 
 
@@ -687,6 +718,19 @@ class Handler(BaseHTTPRequestHandler):
         if r == "/api/papelera":
             return self._send(200, {"items": db.papelera()})
 
+        if r == "/api/sugerencias":
+            return self._send(200, {"items": db.sugerencias(),
+                                    "whatsapp": CFG.get("whatsapp", "")})
+
+        if r == "/api/ocultos":
+            lista = []
+            for o in db.ocultos():
+                m = POR_REL.get(o["rel"])
+                lista.append({"rel": o["rel"],
+                              "nombre": o.get("nombre") or (m["nombre"] if m else o["rel"]),
+                              "ruta": o["rel"]})
+            return self._send(200, {"items": lista})
+
         if r == "/api/duplicados":
             return self._send(200, {"grupos": buscar_duplicados()})
 
@@ -772,6 +816,36 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, res)
             recargar_parcial(d.get("rel", ""))
             return self._send(200, res)
+
+        if r == "/api/sugerencia":
+            t = str(self._json().get("texto") or "").strip()
+            if not t:
+                return self._send(400, {"error": "escribe algo primero"})
+            db.agregar_sugerencia(t[:4000])
+            return self._send(200, {"ok": True, "items": db.sugerencias()})
+
+        if r == "/api/sugerencia/borrar":
+            db.borrar_sugerencia(self._json().get("id"))
+            return self._send(200, {"ok": True, "items": db.sugerencias()})
+
+        if r == "/api/sugerencia/enviadas":
+            db.marcar_enviadas()
+            return self._send(200, {"ok": True, "items": db.sugerencias()})
+
+        if r == "/api/config/whatsapp":
+            CFG["whatsapp"] = str(self._json().get("numero") or "").strip()
+            guardar_config(CFG)
+            return self._send(200, {"ok": True, "whatsapp": CFG["whatsapp"]})
+
+        if r == "/api/ocultar":
+            rel = self._json().get("rel", "")
+            if not rel or rel not in POR_REL:
+                return self._send(400, {"error": "modelo no válido"})
+            return self._send(200, {"ok": True, "oculto": db.alternar_oculto(rel)})
+
+        if r == "/api/carpeta/cambiar":
+            res = cambiar_carpeta(self._json().get("carpeta"))
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/borrar-archivo":
             d = self._json()
