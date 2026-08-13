@@ -209,6 +209,9 @@ def indexar():
         "raiz": RAIZ,
         "heredados": heredados,
         "generado": int(time.time()),
+        # con qué versión del clasificador se ordenó esto: si la app trae una
+        # más nueva, vuelve a ordenar sola
+        "clasificador": getattr(categorias, "VERSION_CLASIFICADOR", 1),
         "total_modelos": len(modelos),
         "total_carpetas": total_carpetas,
         "categorias": categorias.estructura(),

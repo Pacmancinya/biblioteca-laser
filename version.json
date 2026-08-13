@@ -1,6 +1,6 @@
 {
-  "version": "1.4",
-  "nombre": "Categorías y conversor",
-  "novedades": "Se arregló el orden de las categorías: los insectos ya no salen en Vehículos y ahora manda la forma en que tienes organizadas tus carpetas. Puedes crear, renombrar y sacar subcategorías desde Ajustes. Cada archivo se abre con su programa (los .lbrn en LightBurn, los .svg y .cdr en CorelDRAW) y en el botón ⋯ puedes elegir otro o convertirlo a otro formato. Además, los modelos de LightBurn que no tenían foto ahora muestran la vista previa que traen adentro.",
+  "version": "1.5",
+  "nombre": "Se reordena solo",
+  "novedades": "Arregla lo de la actualización anterior: las categorías nuevas no se aplicaban hasta volver a leer la carpeta, así que todo seguía igual de desordenado. Ahora, al abrir la app después de actualizar, los modelos se reordenan solos. Además llega el conversor de archivos, que en la 1.4 se quedó afuera del paquete por error.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

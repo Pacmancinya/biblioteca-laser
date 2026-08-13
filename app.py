@@ -10,12 +10,13 @@ Servidor en 127.0.0.1 que sirve la biblioteca en el navegador y permite:
   - ventas de feria y panel de métricas
 """
 import os, sys, json, re, threading, webbrowser, subprocess, urllib.parse, mimetypes, hashlib, shutil, time
+import base64, io          # los usa el conversor (miniaturas de LightBurn)
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 
-APP_VERSION = "1.4"
-APP_NOMBRE = "Categorías y conversor"   # nombre corto de esta versión, para reconocerla
+APP_VERSION = "1.5"
+APP_NOMBRE = "Se reordena solo"   # nombre corto de esta versión, para reconocerla
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -321,8 +322,7 @@ def miniatura(rel):
     try:
         if not os.path.exists(destino) or os.path.getmtime(destino) < os.path.getmtime(origen):
             if lbrn:
-                import convertir
-                res = convertir.miniatura_lightburn(origen, destino + ".png")
+                res = miniatura_lightburn(origen, destino + ".png")
                 if not res.get("ok"):
                     return None
                 im = Image.open(destino + ".png").convert("RGB")
@@ -335,6 +335,151 @@ def miniatura(rel):
         return None
     with open(destino, "rb") as f:
         return f.read(), "image/jpeg"
+
+
+
+# =========================================================================
+#  CONVERSOR DE ARCHIVOS
+#  Vive aquí adentro y no en un archivo aparte a propósito: al actualizar,
+#  las versiones viejas de la app solo reemplazan los archivos que ya
+#  conocen. Un archivo NUEVO no les llega (paso con convertir.py en la 1.4
+#  y el papá se quedo sin conversor). Metido en app.py, siempre llega.
+# =========================================================================
+IMAGENES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
+VECTORES = {".svg", ".pdf", ".dxf", ".eps", ".ps", ".emf", ".wmf", ".ai"}
+LIGHTBURN = {".lbrn", ".lbrn2"}
+COREL = {".cdr", ".cmx"}
+
+SALIDA_IMAGEN = ["png", "jpg", "webp", "bmp", "pdf"]
+SALIDA_VECTOR = ["svg", "pdf", "dxf", "png", "eps"]
+
+_RX_THUMB = re.compile(rb'<Thumbnail\s+Source="([^"]+)"')
+
+
+def formatos_destino(archivo):
+    """A qué formatos se puede llevar este archivo."""
+    ext = os.path.splitext(archivo)[1].lower()
+    if ext in LIGHTBURN:
+        return ["png"]           # solo la miniatura que trae adentro
+    if ext in IMAGENES:
+        return [f for f in SALIDA_IMAGEN if f != ext.lstrip(".")]
+    if ext in VECTORES:
+        return [f for f in SALIDA_VECTOR if f != ext.lstrip(".")]
+    return []
+
+
+def por_que_no(archivo):
+    """Si no se puede convertir, explicar por qué en cristiano."""
+    ext = os.path.splitext(archivo)[1].lower()
+    if ext in COREL:
+        return ("Los archivos %s son formato cerrado de CorelDRAW: solo CorelDRAW "
+                "puede abrirlos. Ábrelo ahí y usa Archivo → Exportar." % ext)
+    if not formatos_destino(archivo):
+        return "Todavía no sé convertir archivos %s." % (ext or "sin extensión")
+    return ""
+
+
+# ------------------------------------------------------------------ LightBurn
+def miniatura_lightburn(origen, destino):
+    """Saca la miniatura PNG que LightBurn guarda dentro del archivo."""
+    try:
+        with open(origen, "rb") as f:
+            # la miniatura va al principio; no hace falta leer archivos de 20 MB enteros
+            cabeza = f.read(8_000_000)
+    except OSError as e:
+        return {"error": "No pude leer el archivo: %s" % e}
+
+    m = _RX_THUMB.search(cabeza)
+    if not m:
+        return {"error": "Este archivo de LightBurn no trae miniatura adentro."}
+    try:
+        datos = base64.b64decode(m.group(1))
+        from PIL import Image
+        img = Image.open(io.BytesIO(datos))
+        img.load()
+        img.save(destino)
+    except Exception as e:
+        return {"error": "La miniatura venía dañada: %s" % e}
+    return {"ok": True, "archivo": destino, "con": "la miniatura de LightBurn"}
+
+
+# --------------------------------------------------------------------- fotos
+def convertir_imagen(origen, destino):
+    try:
+        from PIL import Image
+        img = Image.open(origen)
+        img.load()
+        # jpg y pdf no soportan transparencia: la aplanamos sobre blanco
+        if destino.lower().endswith((".jpg", ".jpeg", ".pdf")) and img.mode in ("RGBA", "LA", "P"):
+            fondo = Image.new("RGB", img.size, (255, 255, 255))
+            img = img.convert("RGBA")
+            fondo.paste(img, mask=img.split()[-1])
+            img = fondo
+        img.save(destino)
+    except Exception as e:
+        return {"error": "No pude convertir la imagen: %s" % e}
+    return {"ok": True, "archivo": destino, "con": "Pillow"}
+
+
+# ------------------------------------------------------------------ vectores
+def convertir_vector(origen, destino, inkscape):
+    if not inkscape:
+        return {"error": "Para convertir dibujos vectoriales hace falta Inkscape "
+                         "(es gratis: inkscape.org). Instálalo y vuelve a intentar."}
+    ext = os.path.splitext(destino)[1].lower().lstrip(".")
+    cmd = [inkscape, origen, "--export-filename=" + destino]
+    if ext == "png":
+        cmd.append("--export-dpi=300")
+    if ext == "svg":
+        cmd.append("--export-plain-svg")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except subprocess.TimeoutExpired:
+        return {"error": "Inkscape se demoró demasiado. Puede que el archivo sea muy pesado."}
+    except Exception as e:
+        return {"error": "No pude ejecutar Inkscape: %s" % e}
+
+    if not os.path.exists(destino) or os.path.getsize(destino) == 0:
+        detalle = (r.stderr or r.stdout or "").strip().splitlines()
+        return {"error": "Inkscape no logró convertirlo.",
+                "detalle": detalle[-1][:200] if detalle else ""}
+    return {"ok": True, "archivo": destino, "con": "Inkscape"}
+
+
+# -------------------------------------------------------------------- entrada
+def convertir_archivo(origen, formato, inkscape=None, carpeta_salida=None):
+    """Convierte `origen` al `formato` pedido. Nunca toca el archivo original."""
+    if not os.path.exists(origen):
+        return {"error": "No encuentro ese archivo."}
+    formato = (formato or "").strip().lower().lstrip(".")
+    if not formato.isalnum():
+        return {"error": "Formato no válido."}
+
+    ext = os.path.splitext(origen)[1].lower()
+    permitidos = formatos_destino(origen)
+    if not permitidos:
+        return {"error": por_que_no(origen)}
+    if formato not in permitidos:
+        return {"error": "De %s puedo pasar a: %s." % (ext, ", ".join(permitidos))}
+
+    carpeta = carpeta_salida or os.path.dirname(origen)
+    base = os.path.splitext(os.path.basename(origen))[0]
+    destino = os.path.join(carpeta, "%s.%s" % (base, formato))
+    # si ya existe uno con ese nombre, no lo pisamos
+    n = 2
+    while os.path.exists(destino):
+        destino = os.path.join(carpeta, "%s (%d).%s" % (base, n, formato))
+        n += 1
+
+    try:
+        if ext in LIGHTBURN:
+            return miniatura_lightburn(origen, destino)
+        if ext in IMAGENES:
+            return convertir_imagen(origen, destino)
+        return convertir_vector(origen, destino, inkscape)
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------- subir archivos
@@ -585,7 +730,15 @@ def buscar_duplicados():
 
 
 # ---------------------------------------------------------------- respaldo de datos
-ARCHIVOS_CODIGO = ["app.py", "db.py", "indexar.py", "categorias.py", "ui.html"]
+# Archivos que SON la app (se reemplazan al actualizar). Se listan por si
+# hiciera falta, pero la actualización toma todo lo que venga en el paquete:
+# así nunca se queda afuera un archivo nuevo (paso con convertir.py en la 1.4).
+ARCHIVOS_CODIGO = ["app.py", "db.py", "indexar.py", "categorias.py",
+                   "elegir_carpeta.py", "actualizar.py", "ui.html"]
+
+# Lo que NUNCA se pisa al actualizar: son los datos del usuario.
+DATOS_DEL_USUARIO = {"config.json", "biblioteca.json", "biblioteca.db",
+                     "biblioteca.db-wal", "biblioteca.db-shm", "version.json"}
 
 # ---------------------------------------------------------------- cotización
 def costo_por_minuto():
@@ -918,14 +1071,23 @@ def aplicar_actualizacion(url_zip):
     cambiados = []
     try:
         with zipfile.ZipFile(io.BytesIO(crudo)) as z:
-            nombres = z.namelist()
-            for archivo in ARCHIVOS_CODIGO + ["INICIAR Biblioteca.bat", "LEEME.txt"]:
-                cand = [n for n in nombres if n.endswith("/" + archivo) or n == archivo]
-                if not cand:
+            for n in z.namelist():
+                if n.endswith("/"):
                     continue
-                datos = z.read(cand[0])
+                partes = n.split("/")
+                # solo la raíz del paquete: nada de subcarpetas
+                if len(partes) > 2:
+                    continue
+                archivo = partes[-1]
+                if archivo in DATOS_DEL_USUARIO or archivo.startswith("."):
+                    continue
+                if not archivo.lower().endswith((".py", ".html", ".bat", ".txt", ".md")):
+                    continue
+                datos = z.read(n)
                 destino = os.path.join(BASE, archivo)
                 if os.path.exists(destino):
+                    if open(destino, "rb").read() == datos:
+                        continue            # ya está igual, no lo tocamos
                     shutil.copy2(destino, os.path.join(respaldo, archivo))
                 with open(destino, "wb") as f:
                     f.write(datos)
@@ -1077,11 +1239,10 @@ class Handler(BaseHTTPRequestHandler):
                                     "asignaciones": CFG.get("asignaciones") or {}})
 
         if r == "/api/convertir/opciones":
-            import convertir
             a = arg("f")
             return self._send(200, {
-                "formatos": convertir.formatos_destino(a),
-                "motivo": convertir.por_que_no(a),
+                "formatos": formatos_destino(a),
+                "motivo": por_que_no(a),
                 "inkscape": bool(buscar_programa("inkscape")),
             })
 
@@ -1291,13 +1452,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/convertir":
-            import convertir
             d = self._json()
             p = d.get("p", "")
             if not ruta_segura(p) or not os.path.exists(p):
                 return self._send(403, {"error": "ruta no permitida"})
-            res = convertir.convertir(p, d.get("formato", ""),
-                                      inkscape=buscar_programa("inkscape"))
+            res = convertir_archivo(p, d.get("formato", ""),
+                                    inkscape=buscar_programa("inkscape"))
             if res.get("ok"):
                 db.registrar_version(d.get("rel", ""), "convertido",
                                      os.path.basename(res["archivo"]), "")
@@ -1385,9 +1545,37 @@ def recargar_parcial(rel):
         m["preview"] = a["imagen"][0]
 
 
+def reordenar_si_hace_falta():
+    """Si la app trae una forma nueva de ordenar los modelos, vuelve a leer la
+    carpeta sola. Sin esto, mejorar las categorías no cambiaría nada hasta que
+    el usuario apretara 'Buscar modelos nuevos' a mano."""
+    global DATOS, MODELOS, POR_REL
+    import categorias
+    nueva = getattr(categorias, "VERSION_CLASIFICADOR", 1)
+    guardada = DATOS.get("clasificador", 0)
+    if guardada >= nueva or not RAIZ or not os.path.isdir(RAIZ):
+        return False
+    print("  Ordenando tus modelos con las categorías nuevas...")
+    try:
+        r = subprocess.run([sys.executable, os.path.join(BASE, "indexar.py"), RAIZ],
+                           cwd=BASE, capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            print("  (no se pudo reordenar ahora; puedes hacerlo en Ajustes)")
+            return False
+    except Exception:
+        print("  (no se pudo reordenar ahora; puedes hacerlo en Ajustes)")
+        return False
+    DATOS = cargar_indice()
+    MODELOS = DATOS["modelos"]
+    POR_REL = {m["rel"]: m for m in MODELOS}
+    print("  Listo: tus modelos quedaron ordenados de nuevo.")
+    return True
+
+
 def main():
     db.cx()
     db.sembrar_costos()
+    reordenar_si_hace_falta()
     print("=" * 54)
     print("  BIBLIOTECA LASER")
     print("=" * 54)

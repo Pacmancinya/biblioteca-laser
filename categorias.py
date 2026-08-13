@@ -11,6 +11,12 @@ manda siempre por sobre lo automático.
 """
 import re, unicodedata
 
+# Cada vez que se cambie cómo se clasifica, hay que SUBIR este número.
+# La app lo compara con el que quedó guardado al indexar y, si no calza,
+# vuelve a ordenar los modelos sola. Sin esto, mejorar las categorías no
+# cambia nada en el computador del usuario hasta que reindexe a mano.
+VERSION_CLASIFICADOR = 2
+
 # ---------------------------------------------------------------------------
 # (subcategoría, [palabras clave])  — se evalúan en orden dentro de cada grupo
 # ---------------------------------------------------------------------------
