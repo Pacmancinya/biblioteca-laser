@@ -2,9 +2,12 @@
 *.pyc
 .miniaturas/
 .venv/
+Biblioteca Laser.lnk
+EMPEZAR AQUI.txt
 __pycache__/
 _convertidos/
 _exe/
+_exedbg/
 _papelera/
 _paquete/
 _ventana/
