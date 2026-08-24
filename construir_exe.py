@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Arma el programa listo para la PC del papa: un .exe de doble clic.
+"""Arma un .exe con PyInstaller.  ---  NO SE USA, ver abajo.
+
+OJO: Windows 11 trae "Control inteligente de aplicaciones" (Smart App
+Control) y BLOQUEA los ejecutables sin firma digital, con el mensaje
+"Una directiva de Control de aplicaciones bloqueo este archivo".
+Un .exe hecho en casa no arranca, y no hay forma de hacer una excepcion
+por archivo: habria que comprar un certificado de firma de codigo.
+
+Por eso el programa se entrega con INSTALAR.bat + un acceso directo a
+pythonw.exe, que SI viene firmado por la Python Software Foundation.
+El resultado para el usuario es el mismo: un icono, ventana propia y
+sin ventana negra.
+
+Este archivo se deja por si algun dia hay certificado.
+
+Arma el programa listo para la PC del papa: un .exe de doble clic.
 
 Deja una carpeta asi:
 
@@ -23,10 +38,12 @@ import zipfile
 BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "Biblioteca Laser"
 
+GUIA = "empezar_aqui.txt"        # la guia corta que ve primero el usuario
+
 # lo que va SUELTO al lado del exe (se puede actualizar)
 APP = ["app.py", "db.py", "indexar.py", "categorias.py", "formatos.py",
        "dxf.py", "eps.py", "svg.py", "lbrn.py", "actualizar.py",
-       "elegir_carpeta.py", "ui.html", "LEEME.txt", "icono.ico"]
+       "elegir_carpeta.py", "migrar.py", "ui.html", "LEEME.txt", "icono.ico"]
 
 
 def revisar():
@@ -89,18 +106,10 @@ def build(salida):
     for f in APP:
         shutil.copy2(os.path.join(BASE, f), os.path.join(destino, f))
 
-    # un acceso directo con nombre claro para el escritorio
-    with open(os.path.join(destino, "COMO USARLO.txt"), "w", encoding="utf-8") as f:
-        f.write(
-            "BIBLIOTECA LASER\r\n"
-            "================\r\n\r\n"
-            "Doble clic en:   Biblioteca Laser.exe\r\n\r\n"
-            "La primera vez te va a pedir la carpeta donde tienes tus modelos.\r\n"
-            "Despues abre solo.\r\n\r\n"
-            "Ya no necesitas Python ni el navegador: es un programa normal.\r\n\r\n"
-            "Si quieres tenerlo a mano: boton derecho sobre 'Biblioteca Laser.exe'\r\n"
-            "-> Enviar a -> Escritorio (crear acceso directo)\r\n\r\n"
-            "Lo demas de esta carpeta lo necesita el programa. No lo borres.\r\n")
+    # la guia corta, con el nombre mas obvio posible
+    guia = os.path.join(BASE, GUIA)
+    if os.path.exists(guia):
+        shutil.copy2(guia, os.path.join(destino, "EMPEZAR AQUI.txt"))
 
     os.makedirs(salida, exist_ok=True)
     zip_final = os.path.join(salida, "Biblioteca-Laser-programa.zip")

@@ -16,8 +16,10 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import db
 import formatos
 
-APP_VERSION = "2.0"
-APP_NOMBRE = "Programa de verdad"   # nombre corto de esta versión, para reconocerla
+CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
+
+APP_VERSION = "2.0.1"
+APP_NOMBRE = "Icono en el Escritorio"   # nombre corto de esta versión, para reconocerla
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -44,12 +46,20 @@ EXT_CORTE = {".dxf", ".svg", ".eps", ".cdr", ".ai", ".lbrn", ".lbrn2", ".plt", "
 
 
 # ---------------------------------------------------------------- índice
+VACIO = {"raiz": "", "modelos": [], "categorias": [], "total_modelos": 0}
+
+
 def cargar_indice():
+    """Lee biblioteca.json. Si todavía no existe (instalación recién puesta)
+    devuelve una biblioteca vacía en vez de cortar el programa: la ventana
+    tiene que abrir igual para poder pedir la carpeta de modelos."""
     if not os.path.exists(INDICE):
-        print("Falta biblioteca.json — ejecuta primero:  python indexar.py")
-        sys.exit(1)
-    with open(INDICE, encoding="utf-8") as f:
-        return json.load(f)
+        return dict(VACIO)
+    try:
+        with open(INDICE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return dict(VACIO)
 
 DATOS = cargar_indice()
 RAIZ = DATOS["raiz"]
@@ -1101,6 +1111,76 @@ def cotizar(d):
     }
 
 
+def elegir_carpeta_nativa(titulo="Elige la carpeta donde tienes tus modelos"):
+    """Abre el buscador de carpetas de Windows sin salir del programa.
+
+    Como .exe no se puede lanzar elegir_carpeta.py con Python (sys.executable
+    es el propio programa), asi que se llama directo a la API de Windows.
+    Devuelve la ruta elegida, o "" si canceló.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    shell32 = ctypes.windll.shell32
+    ole32 = ctypes.windll.ole32
+    ole32.CoInitialize(None)
+    try:
+        BIF_RETURNONLYFSDIRS = 0x0001
+        BIF_NEWDIALOGSTYLE = 0x0040
+
+        class BROWSEINFO(ctypes.Structure):
+            _fields_ = [("hwndOwner", wintypes.HWND),
+                        ("pidlRoot", ctypes.c_void_p),
+                        ("pszDisplayName", wintypes.LPWSTR),
+                        ("lpszTitle", wintypes.LPCWSTR),
+                        ("ulFlags", wintypes.UINT),
+                        ("lpfn", ctypes.c_void_p),
+                        ("lParam", wintypes.LPARAM),
+                        ("iImage", ctypes.c_int)]
+
+        buf = ctypes.create_unicode_buffer(1024)
+        bi = BROWSEINFO()
+        bi.hwndOwner = None
+        bi.pidlRoot = None
+        bi.pszDisplayName = ctypes.cast(buf, wintypes.LPWSTR)
+        bi.lpszTitle = titulo
+        bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE
+
+        pidl = shell32.SHBrowseForFolderW(ctypes.byref(bi))
+        if not pidl:
+            return ""
+        ruta = ctypes.create_unicode_buffer(1024)
+        ok = shell32.SHGetPathFromIDListW(pidl, ruta)
+        ctypes.windll.ole32.CoTaskMemFree(pidl)
+        return ruta.value if ok else ""
+    except Exception:
+        return ""
+    finally:
+        try:
+            ole32.CoUninitialize()
+        except Exception:
+            pass
+
+
+def pedir_carpeta(inicial=""):
+    """Pide una carpeta al usuario, de la forma que funcione en este entorno."""
+    if CONGELADO:
+        return elegir_carpeta_nativa(), ""
+    exe = python_con_ventanas()
+    try:
+        r = subprocess.run([exe, os.path.join(BASE, "elegir_carpeta.py"), inicial or ""],
+                           cwd=BASE, capture_output=True, text=True, timeout=600)
+        elegida = (r.stdout or "").strip()
+        if elegida:
+            return elegida, ""
+        err = (r.stderr or "").strip()
+        if err == "cancelado" or r.returncode == 1:
+            return "", "cancelado"
+        return "", err[:200]
+    except Exception as e:
+        return "", str(e)[:200]
+
+
 def python_con_ventanas():
     """pythonw no siempre puede abrir diálogos: preferimos python.exe."""
     exe = sys.executable
@@ -1160,33 +1240,47 @@ def asignar_extension(ext, clave):
     return {"ok": True, "asignaciones": asign}
 
 
+def indexar_ahora(carpeta=None):
+    """Lee la carpeta de modelos y genera biblioteca.json.
+
+    Como .exe no se puede lanzar "python indexar.py": sys.executable es el
+    propio programa. Por eso aca se importa indexar y se corre adentro.
+    """
+    if CONGELADO:
+        try:
+            import importlib
+            import indexar
+            importlib.reload(indexar)
+            indexar.indexar(carpeta) if carpeta else indexar.indexar()
+            return True, ""
+        except SystemExit:
+            return True, ""            # indexar.py termina con sys.exit(0)
+        except Exception as e:
+            return False, str(e)[:150]
+    args = [sys.executable, os.path.join(BASE, "indexar.py")]
+    if carpeta:
+        args.append(carpeta)
+    try:
+        r = subprocess.run(args, cwd=BASE, capture_output=True, text=True, timeout=1800)
+        if r.returncode != 0:
+            return False, ((r.stderr or r.stdout or "").strip()[-200:] or "no pude leer esa carpeta")
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:150]
+
+
 def cambiar_carpeta(nueva=None):
     """Cambia la carpeta de modelos y vuelve a indexar.
     Si no se pasa ruta, abre el selector de carpetas de Windows."""
     if not nueva:
-        # buscamos un python con ventanas (pythonw no siempre puede abrir diálogos)
-        exe = sys.executable
-        alt = os.path.join(os.path.dirname(exe), "python.exe")
-        if os.path.basename(exe).lower().startswith("pythonw") and os.path.exists(alt):
-            exe = alt
-        try:
-            r = subprocess.run([exe, os.path.join(BASE, "elegir_carpeta.py"), RAIZ or ""],
-                               cwd=BASE, capture_output=True, text=True, timeout=300)
-            nueva = (r.stdout or "").strip()
-            if not nueva:
-                err = (r.stderr or "").strip()
-                if err == "cancelado" or r.returncode == 1:
-                    return {"error": "No elegiste ninguna carpeta. "
-                                     "Si no viste la ventana, búscala en la barra de tareas "
-                                     "o escribe la ruta abajo."}
-                return {"error": "No pude abrir la ventana para elegir la carpeta. "
-                                 "Escribe o pega la ruta abajo.",
-                        "detalle": err[:200]}
-        except subprocess.TimeoutExpired:
-            return {"error": "La ventana quedó abierta demasiado rato. Inténtalo de nuevo."}
-        except Exception as e:
+        nueva, err = pedir_carpeta(RAIZ or "")
+        if not nueva:
+            if err == "cancelado" or not err:
+                return {"error": "No elegiste ninguna carpeta. "
+                                 "Si no viste la ventana, búscala en la barra de tareas "
+                                 "o escribe la ruta abajo."}
             return {"error": "No pude abrir la ventana para elegir la carpeta. "
-                             "Escribe o pega la ruta abajo.", "detalle": str(e)[:200]}
+                             "Escribe o pega la ruta abajo.", "detalle": err}
 
     nueva = nueva.strip().strip('"').strip()
     if not nueva:
@@ -1197,13 +1291,9 @@ def cambiar_carpeta(nueva=None):
     cfg = cargar_config()
     cfg["biblioteca"] = nueva
     guardar_config(cfg)
-    try:
-        r = subprocess.run([sys.executable, os.path.join(BASE, "indexar.py"), nueva],
-                           cwd=BASE, capture_output=True, text=True, timeout=1800)
-        if r.returncode != 0:
-            return {"error": "no pude leer esa carpeta"}
-    except Exception as e:
-        return {"error": str(e)}
+    listo, err = indexar_ahora(nueva)
+    if not listo:
+        return {"error": err or "no pude leer esa carpeta"}
     recargar_indice()
     return {"ok": True, "carpeta": RAIZ, "total": len(MODELOS)}
 
@@ -1855,15 +1945,11 @@ class Handler(BaseHTTPRequestHandler):
             ruta = d.get("carpeta")
             if not ruta:
                 # sin ruta escrita, se abre el buscador de carpetas de Windows
-                try:
-                    rr = subprocess.run(
-                        [python_con_ventanas(), os.path.join(BASE, "elegir_carpeta.py"), RAIZ or ""],
-                        cwd=BASE, capture_output=True, text=True, timeout=300)
-                    ruta = (rr.stdout or "").strip()
-                except Exception as e:
-                    return self._send(400, {"error": "No pude abrir la ventana: %s" % str(e)[:90]})
+                ruta, err = pedir_carpeta(RAIZ or "")
                 if not ruta:
-                    return self._send(400, {"error": "No elegiste ninguna carpeta."})
+                    return self._send(400, {"error": "No elegiste ninguna carpeta."
+                                            if err in ("", "cancelado")
+                                            else "No pude abrir la ventana: %s" % err[:90]})
             res = marcar_carpeta(ruta, d.get("categoria"), d.get("subcategoria", ""))
             return self._send(200 if res.get("ok") else 400, res)
 
@@ -1917,13 +2003,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/reindexar":
-            try:
-                subprocess.run([sys.executable, os.path.join(BASE, "indexar.py")],
-                               cwd=BASE, check=True, capture_output=True)
-                recargar_indice()
-                return self._send(200, {"ok": True, "total": len(MODELOS)})
-            except Exception as e:
-                return self._send(500, {"error": str(e)})
+            listo, err = indexar_ahora()
+            if not listo:
+                return self._send(500, {"error": err or "no pude leer la carpeta"})
+            recargar_indice()
+            return self._send(200, {"ok": True, "total": len(MODELOS)})
 
         return self._send(404, {"error": "no encontrado"})
 
@@ -1965,13 +2049,8 @@ def reordenar_si_hace_falta():
     if guardada >= nueva or not RAIZ or not os.path.isdir(RAIZ):
         return False
     print("  Ordenando tus modelos con las categorías nuevas...")
-    try:
-        r = subprocess.run([sys.executable, os.path.join(BASE, "indexar.py"), RAIZ],
-                           cwd=BASE, capture_output=True, text=True, timeout=1800)
-        if r.returncode != 0:
-            print("  (no se pudo reordenar ahora; puedes hacerlo en Ajustes)")
-            return False
-    except Exception:
+    listo, _err = indexar_ahora(RAIZ)
+    if not listo:
         print("  (no se pudo reordenar ahora; puedes hacerlo en Ajustes)")
         return False
     DATOS = cargar_indice()
@@ -1979,6 +2058,20 @@ def reordenar_si_hace_falta():
     POR_REL = {m["rel"]: m for m in MODELOS}
     print("  Listo: tus modelos quedaron ordenados de nuevo.")
     return True
+
+
+def recargar():
+    """Vuelve a leer el indice y la configuracion desde el disco.
+    Se usa cuando algo cambio por fuera (por ejemplo al traer los datos de
+    una instalacion anterior)."""
+    global DATOS, RAIZ, MODELOS, POR_REL, CFG
+    CFG = cargar_config()
+    DATOS = cargar_indice()
+    RAIZ = DATOS.get("raiz", "")
+    MODELOS = DATOS.get("modelos", [])
+    POR_REL = {m["rel"]: m for m in MODELOS}
+    recargar_reglas()
+    return len(MODELOS)
 
 
 def preparar(avisar=None):

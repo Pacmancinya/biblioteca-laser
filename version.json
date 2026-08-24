@@ -1,6 +1,6 @@
 {
-  "version": "2.0",
-  "nombre": "Programa de verdad",
-  "novedades": "Ahora es un programa normal de Windows: doble clic y se abre en su propia ventana. Se acabó el navegador y la ventana negra. Cada modelo tiene dos botones grandes: Abrir en CorelDRAW (siempre en SVG) y Abrir en LightBurn (siempre en .lbrn); si el modelo no trae ese formato, se convierte solo en el momento. Lo que guardes en CorelDRAW puedes dejarlo como la versión principal del modelo. Y ahora puedes crear, renombrar, ordenar y sacar las categorías grandes, además de marcar una carpeta entera para que todo lo de adentro quede en la categoría que tú quieras.",
+  "version": "2.0.1",
+  "nombre": "Icono en el Escritorio",
+  "novedades": "Ahora se abre desde un icono en el Escritorio, en su propia ventana, sin navegador y sin ventana negra. Se instala una sola vez con INSTALAR.bat. Si tenias la version anterior, el programa la busca solo y te ofrece traer tus favoritos, precios, clientes y ventas. Adentro: los dos botones grandes de CorelDRAW y LightBurn con conversion automatica, las categorias que puedes crear y ordenar, y la vista previa dibujada de los modelos que no tenian foto.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

@@ -37,6 +37,90 @@ def _avisar_error(titulo, texto):
         print(titulo, texto)
 
 
+def _preguntar(titulo, texto):
+    """Cartel de Si/No. Devuelve True si dijo que si."""
+    try:
+        import ctypes
+        # 0x24 = iconos de pregunta + botones Si/No ; 6 = respondio Si
+        return ctypes.windll.user32.MessageBoxW(0, texto, titulo, 0x24) == 6
+    except Exception:
+        return False
+
+
+def _traer_datos_viejos():
+    """Si es una instalacion nueva y hay una anterior, ofrece traerse los datos.
+    Asi el usuario no tiene que copiar archivos a mano."""
+    try:
+        import migrar
+    except Exception:
+        return
+    if not migrar.hace_falta(BASE):
+        return                       # ya tiene datos propios: no se toca nada
+    try:
+        encontradas = migrar.buscar(saltar=BASE)
+    except Exception:
+        return
+    if not encontradas:
+        return
+
+    vieja = encontradas[0]
+    info = migrar.resumen(vieja)
+    detalle = []
+    if info["modelos"]:
+        detalle.append("%d modelos con datos tuyos" % info["modelos"])
+    if info["favoritos"]:
+        detalle.append("%d favoritos" % info["favoritos"])
+    if info["clientes"]:
+        detalle.append("%d clientes" % info["clientes"])
+    if info["ventas"]:
+        detalle.append("%d ventas" % info["ventas"])
+
+    texto = ("Encontre una version anterior de la Biblioteca en:\n\n%s\n\n"
+             "%s\n\n¿Quieres traer esos datos a esta version?\n\n"
+             "(La carpeta vieja no se toca ni se borra.)"
+             % (vieja, ("Tiene: " + ", ".join(detalle)) if detalle
+                else "Tiene tus ajustes guardados."))
+    if not _preguntar(TITULO, texto):
+        return
+    r = migrar.traer(vieja, BASE)
+    if r.get("error"):
+        _avisar_error(TITULO, r["error"])
+    else:
+        _avisar_error(TITULO, "Listo, ya tienes tus datos aqui.\n\n"
+                              "Tus favoritos, precios, clientes y ventas estan como los dejaste.")
+
+
+def _primera_vez(app):
+    """Si todavía no hay biblioteca leída, pedir la carpeta de modelos y leerla.
+
+    Antes de esto el programa se moria en silencio cuando faltaba
+    biblioteca.json, porque sin consola no se veia el mensaje de error.
+    """
+
+    if app.MODELOS:
+        return True                      # ya hay biblioteca cargada
+
+    carpeta = (app.CFG.get("biblioteca") or "").strip()
+    if not carpeta or not os.path.isdir(carpeta):
+        _avisar_error(TITULO,
+                      "Bienvenido.\n\nPara empezar, elige la carpeta donde tienes "
+                      "tus modelos.\n\nSe va a abrir una ventana para buscarla.")
+        carpeta, err = app.pedir_carpeta()
+        if err and err != "cancelado":
+            _avisar_error(TITULO, "No pude abrir la ventana para elegir la carpeta.\n\n%s" % err)
+            return False
+        if not carpeta:
+            _avisar_error(TITULO, "No elegiste ninguna carpeta.\n\n"
+                                  "Vuelve a abrir el programa cuando quieras.")
+            return False
+
+    res = app.cambiar_carpeta(carpeta)
+    if not res.get("ok"):
+        _avisar_error(TITULO, res.get("error", "No pude leer esa carpeta."))
+        return False
+    return True
+
+
 def _sin_ventana():
     """Si la ventana no se puede abrir, al menos que funcione en el navegador."""
     import webbrowser
@@ -70,6 +154,10 @@ def main():
         return 0
 
     try:
+        _traer_datos_viejos()
+        app.recargar()               # por si la migracion trajo datos
+        if not _primera_vez(app):
+            return 0
         app.preparar()
         srv, url = app.arrancar_servidor()
     except Exception as e:

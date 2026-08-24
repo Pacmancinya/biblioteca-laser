@@ -4,7 +4,7 @@
 
 PARA ABRIRLA
 ------------
-Doble clic en:   Biblioteca Laser.exe
+Doble clic en el icono del Escritorio:   Biblioteca Laser
 
 Se abre en su propia ventana, como cualquier programa.
 Ya NO se abre el navegador ni queda una ventana negra.
@@ -13,8 +13,8 @@ Para cerrar: la X de la ventana, como siempre.
 La primera vez te pide la carpeta donde tienes tus modelos.
 Despues abre solo.
 
-Si lo quieres a mano: boton derecho sobre 'Biblioteca Laser.exe'
--> Enviar a -> Escritorio (crear acceso directo).
+(Si todavia no tienes el icono, haz doble clic en INSTALAR.bat
+ una sola vez y se crea. Eso ya lo explica EMPEZAR AQUI.txt)
 
 
 ANOTAR IDEAS Y CAMBIOS  (burbuja 💬 abajo a la derecha)

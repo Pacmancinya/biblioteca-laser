@@ -1,0 +1,64 @@
+===================================================
+   BIBLIOTECA LASER
+   Como dejarla lista (se hace una sola vez)
+===================================================
+
+
+PASO 1
+------
+Doble clic en:    INSTALAR.bat
+
+Se abre una ventana negra que va sola. Deja que termine.
+La primera vez puede demorar unos minutos: esta preparando
+todo lo que el programa necesita.
+
+
+PASO 2
+------
+Cuando termine, vas a tener en tu ESCRITORIO un icono nuevo:
+
+        Biblioteca Laser
+
+De ahora en adelante, abre la biblioteca con ESE icono.
+Ya no vas a ver ninguna ventana negra: se abre en su propia
+ventana, como cualquier programa.
+
+
+PASO 3
+------
+Si tenias la version anterior, el programa la va a buscar solo
+y te va a preguntar:
+
+    "Encontre una version anterior... ¿Quieres traer esos datos?"
+
+Dile que SI. Se traen tus favoritos, precios, clientes, ventas y
+la carpeta de tus modelos. La carpeta vieja NO se borra ni se toca.
+
+Si es la primera vez, te va a pedir que elijas la carpeta donde
+tienes tus modelos. Eso es todo.
+
+
+-------------------------------------------------
+LO QUE CAMBIO
+-------------------------------------------------
+* Ya NO se abre el navegador. Es una ventana propia.
+* Ya NO queda la ventana negra abierta mientras la usas.
+* Para cerrar: la X de la ventana, como cualquier programa.
+
+
+-------------------------------------------------
+SI ALGO NO FUNCIONA
+-------------------------------------------------
+Si el icono del Escritorio no aparecio, puedes abrir la
+biblioteca con el archivo:
+
+        Biblioteca Laser.lnk
+
+que quedo dentro de esta misma carpeta.
+
+Cualquier problema: escribele a Ruperto por WhatsApp
+al +56 9 5470 3465, y si puedes mandale una foto de la pantalla.
+
+En LEEME.txt esta explicado todo lo demas: los botones de
+CorelDRAW y LightBurn, las categorias, el cotizador, los
+clientes y las ventas.

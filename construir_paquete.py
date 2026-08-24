@@ -20,11 +20,13 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "Biblioteca-Laser"
 
 INCLUIR = ["app.py", "db.py", "indexar.py", "categorias.py", "actualizar.py",
-           "elegir_carpeta.py", "ui.html", "lanzador.py",
-           "formatos.py", "dxf.py", "eps.py", "svg.py", "lbrn.py", "icono.ico",
+           "elegir_carpeta.py", "ui.html", "lanzador.py", "migrar.py",
+           "crear_acceso.py", "formatos.py", "dxf.py", "eps.py", "svg.py",
+           "lbrn.py", "icono.ico",
+           "INSTALAR.bat",
            "INICIAR Biblioteca.bat", "Actualizar modelos.bat",
            "Cambiar carpeta de modelos.bat", "Buscar actualizaciones.bat",
-           "SOLUCIONAR-PROBLEMAS.bat", "LEEME.txt"]
+           "SOLUCIONAR-PROBLEMAS.bat", "LEEME.txt", "EMPEZAR AQUI.txt"]
 
 
 def build(salida):
@@ -33,6 +35,11 @@ def build(salida):
     if os.path.exists(stage_padre):
         shutil.rmtree(stage_padre)
     os.makedirs(stage)
+
+    # la guia corta va con un nombre bien visible
+    guia = os.path.join(BASE, "empezar_aqui.txt")
+    if os.path.exists(guia):
+        shutil.copy2(guia, os.path.join(BASE, "EMPEZAR AQUI.txt"))
 
     faltan = []
     for f in INCLUIR:
@@ -65,8 +72,8 @@ def main():
     print("Como usarlo en el otro PC:")
     print("  1. Copia el ZIP (pendrive, WhatsApp, Drive, lo que sea).")
     print("  2. Descomprimelo, por ejemplo en el Escritorio.")
-    print("  3. Doble clic en 'INICIAR Biblioteca.bat'.")
-    print("  4. La primera vez pide elegir la carpeta de modelos. Listo.")
+    print("  3. Doble clic en 'INSTALAR.bat'  (una sola vez).")
+    print("  4. Queda un icono 'Biblioteca Laser' en el Escritorio: con ese se abre.")
 
 
 if __name__ == "__main__":
