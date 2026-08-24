@@ -4,14 +4,17 @@
 
 PARA ABRIRLA
 ------------
-Doble clic en:   INICIAR Biblioteca.bat
+Doble clic en:   Biblioteca Laser.exe
 
-La primera vez prepara todo solo (si el PC no tiene Python, lo
-instala). Despues te pide elegir la carpeta donde tienes tus
-modelos. Eso es todo.
+Se abre en su propia ventana, como cualquier programa.
+Ya NO se abre el navegador ni queda una ventana negra.
+Para cerrar: la X de la ventana, como siempre.
 
-Se abre una ventana negra (dejala abierta) y la biblioteca se
-abre en el navegador. Para cerrar: cierra la ventana negra.
+La primera vez te pide la carpeta donde tienes tus modelos.
+Despues abre solo.
+
+Si lo quieres a mano: boton derecho sobre 'Biblioteca Laser.exe'
+-> Enviar a -> Escritorio (crear acceso directo).
 
 
 ANOTAR IDEAS Y CAMBIOS  (burbuja 💬 abajo a la derecha)
@@ -84,14 +87,20 @@ AL HACER CLIC EN UN MODELO
 --------------------------
 Se abre su ficha con estas pestanas:
 
-ARCHIVOS  -> los botones para abrir:
-               Abrir en LightBurn / Ver manual / Ver imagen /
-               Abrir carpeta. Abajo la lista completa de archivos.
+ARCHIVOS  -> a la izquierda estan los DOS BOTONES GRANDES:
 
-               Cada archivo se abre con el programa que le
-               corresponde: los .lbrn y .lbrn2 en LightBurn, y
-               los .svg, .cdr, .ai y .eps en CorelDRAW.
-               El boton dice a donde va ("LightBurn", "CorelDRAW").
+                 ABRIR EN LIGHTBURN  -> le pasa un .lbrn
+                 ABRIR EN CORELDRAW  -> le pasa un .svg
+
+               Si el modelo no tiene ese formato, se convierte
+               SOLO en el momento. No tienes que hacer nada.
+               Debajo del boton dice de que archivo lo saca.
+
+               Los .cdr son la excepcion: son formato cerrado de
+               Corel y solo los abre CorelDRAW.
+
+               Mas abajo: Ver manual, Ver imagen, Abrir carpeta,
+               y la lista completa de archivos del modelo.
 
                El boton  ⋯  al lado sirve para:
                  - abrirlo con OTRO programa (y dejarlo asi
@@ -118,11 +127,38 @@ HISTORIAL -> si reemplazaste un archivo, aqui estan las versiones
 La estrella (arriba a la izquierda de cada foto) marca favoritos.
 
 
+SI EDITAS UN MODELO EN CORELDRAW
+-------------------------------
+Abre el modelo en CorelDRAW con el boton grande, hazle los
+cambios y guarda.
+
+Cuando vuelvas a la ficha del modelo en la biblioteca, arriba
+te va a aparecer un cartel preguntando si quieres que ESA
+version sea la principal.
+
+Si dices que si:
+  - es la que se va a abrir de ahora en adelante
+  - de ahi sale la foto del modelo
+  - la version anterior NO se borra, queda en el Historial
+
+
 CATEGORIAS Y SUBCATEGORIAS
 --------------------------
 Engranaje -> "Categorias y subcategorias".
 
-Ahi puedes:
+LAS CATEGORIAS GRANDES (las de la barra de arriba):
+  + Categoria nueva  -> crear una tuya
+  ▲ ▼                -> subirla o bajarla en la barra
+  ✎                  -> cambiarle el nombre
+  ✕                  -> sacarla (te pregunta a donde van sus modelos)
+
+  📁 Una carpeta entera a una categoria:
+     Le dices "toda esta carpeta es de tal categoria" y todo lo
+     que este adentro (incluidas las subcarpetas) queda ahi.
+     Sirve cuando tienes tus modelos ya ordenados en carpetas.
+     Lo que corrijas modelo por modelo manda por sobre la regla.
+
+LAS SUBCATEGORIAS:
   + Subcategoria  -> crear una nueva
   ✎               -> cambiarle el nombre (los modelos se van con ella)
   ✕               -> sacarla (te pregunta a que subcategoria pasan
@@ -138,26 +174,28 @@ pestana EDITAR -> boton  +  al lado de "Subcategoria".
 
 CONVERTIR ARCHIVOS
 ------------------
-En la lista de archivos de un modelo, boton  ⋯  -> "Convertir a".
+Casi nunca vas a necesitar hacerlo a mano: los botones grandes
+convierten solos. Pero si quieres, en la lista de archivos de un
+modelo esta el boton  ⋯  -> "Convertir a".
 
-Que se puede:
-  FOTOS (jpg, png, webp, bmp)  -> funciona de inmediato, sin
-                                  instalar nada.
-  DIBUJOS (svg, pdf, dxf, eps) -> necesitan INKSCAPE, que es
-                                  gratis: inkscape.org
-                                  Sin el, los botones salen
-                                  apagados y la app te avisa.
-  LIGHTBURN (.lbrn, .lbrn2)    -> saca la imagen de vista previa
-                                  que trae adentro el archivo.
-  CORELDRAW (.cdr)             -> NO se puede: es formato cerrado
-                                  de Corel. Hay que abrirlo en
-                                  CorelDRAW y usar Archivo->Exportar.
+Que se puede, sin instalar NADA:
+  DXF, SVG, EPS, AI      -> a SVG o a .lbrn (de LightBurn)
+  LIGHTBURN (.lbrn2)     -> a SVG, para abrirlo en CorelDRAW
+  FOTOS (jpg, png, ...)  -> entre ellas y a PDF
+
+Lo que NO se puede:
+  CORELDRAW (.cdr)  -> formato cerrado de Corel. Solo lo abre
+                       CorelDRAW. Si quieres usarlo en LightBurn,
+                       abrelo en Corel y guardalo como SVG.
+  AUTOCAD (.dwg)    -> abrelo en AutoCAD o Corel y guardalo
+                       como DXF.
 
 Para llevar un dibujo A LightBurn no hace falta convertir nada:
 LightBurn importa svg, dxf, ai, pdf y png directamente.
 
-El archivo convertido se guarda en la misma carpeta del modelo,
-con el mismo nombre y la extension nueva. El original no se toca.
+Los archivos convertidos NO se mezclan con los tuyos: quedan
+guardados aparte, en la carpeta del programa. Tus carpetas de
+modelos no se ensucian y el original nunca se toca.
 
 
 CLIENTES Y COBROS

@@ -197,6 +197,8 @@
   .acc{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--tx);cursor:pointer;font-size:14px;font-family:var(--fd);text-align:left;width:100%}
   .acc:hover{border-color:var(--amb);background:var(--panel3)}
   .acc svg{width:17px;height:17px;flex:none}
+  .acc .em{font-size:19px;flex:none;line-height:1}
+  .acc.pri .em{filter:saturate(1.2)}
   .acc.pri{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
   .acc.pri:hover{background:var(--amb2)}
   .acc small{display:block;font-family:var(--fb);font-weight:400;font-size:11px;color:var(--tx3);margin-top:1px}
@@ -237,6 +239,21 @@
   .catg-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
   .catg-h b{font-family:var(--fd);font-size:1rem;color:var(--amb2)}
   .catg-h .sub{flex:1;margin:0;font-size:12px}
+  .aviso-ed{background:var(--amb-dim);border:1px solid var(--amb);border-radius:11px;
+             padding:13px 15px;margin-bottom:14px}
+  .aviso-ed b{font-family:var(--fd);color:var(--amb2)}
+  .aviso-ed p{margin:5px 0 10px;font-size:13px;color:var(--tx2)}
+  .catg-h .mover{display:flex;flex-direction:column;gap:1px;flex:none}
+  .catg-h .fl{background:none;border:1px solid var(--line);color:var(--tx3);border-radius:4px;
+              cursor:pointer;font-size:8px;line-height:1;padding:2px 4px;font-family:var(--fd)}
+  .catg-h .fl:hover:not(:disabled){border-color:var(--amb);color:var(--amb2)}
+  .catg-h .fl:disabled{opacity:.25;cursor:default}
+  .catg-h .mia{background:var(--amb-dim);color:var(--amb2);font-size:10px;border-radius:5px;
+               padding:2px 6px;font-family:var(--fd);flex:none}
+  .catg-h .bo,.catg-h .bx{background:none;border:1px solid var(--line);color:var(--tx3);
+               border-radius:7px;padding:5px 9px;cursor:pointer;font-size:11.5px;flex:none}
+  .catg-h .bo:hover{border-color:var(--amb);color:var(--amb2)}
+  .catg-h .bx:hover{background:var(--rojo);border-color:var(--rojo);color:#fff}
   .pop-pie{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
   .dupg{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:13px}
   .dupg h5{font-family:var(--fd);font-size:1rem;margin:0 0 11px;color:var(--amb2)}
@@ -395,9 +412,11 @@
 
       <div class="caja">
         <h4>Categorías y subcategorías</h4>
-        <p class="sub">Puedes crear subcategorías nuevas, cambiarles el nombre o sacarlas.
+        <p class="sub">Crea, renombra, ordena (▲▼) o saca categorías y subcategorías.
         Los modelos se mueven solos; en el disco no se toca nada.</p>
         <div id="catsCont"></div>
+        <h4 style="font-size:.95rem;margin:18px 0 8px">Carpetas con categoría fija</h4>
+        <div id="reglasCont"></div>
       </div>
 
       <div class="caja">
@@ -475,7 +494,7 @@
       <button class="mtab" data-p="versiones">Historial</button>
     </div>
     <div class="mb">
-      <div class="mpanel on" id="p-archivos"><div class="cols"><div><div class="prev" id="dPrev"></div><div class="acciones" id="dAcc"></div></div><div id="dArch"></div></div></div>
+      <div class="mpanel on" id="p-archivos"><div id="dAviso" style="display:none"></div><div class="cols"><div><div class="prev" id="dPrev"></div><div class="acciones" id="dAcc"></div></div><div id="dArch"></div></div></div>
       <div class="mpanel" id="p-editar"></div>
       <div class="mpanel" id="p-cotizar"></div>
       <div class="mpanel" id="p-cargar"></div>
@@ -742,6 +761,22 @@ function abrirModelo(rel){
     actual=m; var v=MODELOS.find(function(x){return x.rel===rel})||{};
     document.getElementById('dTit').textContent=v.n||m.nombre;
     document.getElementById('dRuta').textContent=m.rel;
+    // ¿edito algo en CorelDRAW y lo guardo? Se le ofrece dejarlo como el bueno
+    var av=document.getElementById('dAviso');
+    if(m.cambios){
+      var op=[];
+      if(m.cambios.editado) op.push(m.cambios.editado);
+      (m.cambios.nuevos||[]).forEach(function(n){ if(op.indexOf(n)<0) op.push(n); });
+      av.innerHTML='<div class="aviso-ed"><b>Guardaste cambios en este modelo</b>'
+        +'<p>¿Quieres que esta versión sea la principal? Va a ser la que se abre '
+        +'y de la que sale la foto. La anterior no se borra.</p>'
+        +op.map(function(n){
+            return '<button class="btn mini pri" data-principal="'+esc(n)+'">Dejar «'+esc(n)+'» como principal</button>';
+          }).join(' ')
+        +' <button class="btn mini" data-ignorar="1">Ahora no</button></div>';
+      av.style.display='';
+    } else { av.style.display='none'; av.innerHTML=''; }
+
     // preview + acciones
     var prev=document.getElementById('dPrev');
     // si no hay foto, se muestra la miniatura que trae adentro el archivo de LightBurn
@@ -754,13 +789,29 @@ function abrirModelo(rel){
     var corte=m.archivos.corte||[], lb=corte.filter(function(f){return /\.lbrn2?$/i.test(f)});
     PROGS=m.programas||{};
     var pri=lb[0]||corte[0], a=[];
-    // Los botones SIEMPRE aparecen. Si no hay archivo, quedan apagados
-    // y sirven para agregarlo.
-    if(pri){
-      var pp=PROGS[pri], dest=pp?('Abrir en '+pp.nombre):'Abrir para cortar';
-      a.push('<button class="acc pri" data-act="auto" data-f="'+esc(pri)+'"><svg viewBox="0 0 24 24" fill="#14120F"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>'+esc(dest)+'<small>'+esc(pri)+'</small></span></button>');
-    }
-    else a.push('<button class="acc vacio" data-falta="modelo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg><span>Sin archivo para cortar<small>No se encontró · toca para agregar uno</small></span></button>');
+    // Los dos botones grandes. Cada programa recibe el formato que le sirve:
+    // CorelDRAW un SVG y LightBurn un .lbrn. Si el modelo no lo tiene,
+    // se convierte solo al apretar.
+    var ae=m.abrir_en||{};
+    [['lightburn','Abrir en LightBurn','🔥','pri'],
+     ['corel','Abrir en CorelDRAW','🎨','']].forEach(function(x){
+      var k=x[0], info=ae[k]||{};
+      if(!corte.length){
+        a.push('<button class="acc vacio" data-falta="modelo"><span class="em">'+x[2]+'</span>'
+          +'<span>Sin archivo para cortar<small>No se encontró · toca para agregar uno</small></span></button>');
+        return;
+      }
+      if(!info.puede){
+        a.push('<button class="acc vacio" title="'+esc(info.motivo||'')+'"><span class="em">'+x[2]+'</span>'
+          +'<span>'+esc(x[1])+'<small>'+esc(info.motivo||'No se puede con este modelo')+'</small></span></button>');
+        return;
+      }
+      var pie = info.convierte ? ('Se convierte solo desde .'+esc(info.desde))
+                               : (k==='lightburn'?'Ya tiene el archivo listo':'Ya tiene el SVG listo');
+      if(!info.instalado) pie += ' · no encuentro el programa';
+      a.push('<button class="acc '+x[3]+'" data-abrir-en="'+k+'"><span class="em">'+x[2]+'</span>'
+        +'<span>'+esc(x[1])+'<small>'+pie+'</small></span></button>');
+    });
 
     if((m.archivos.manual||[]).length)
       a.push('<button class="acc" data-act="abrir" data-f="'+esc(m.archivos.manual[0])+'"><svg viewBox="0 0 24 24" fill="none" stroke="#E0654F" stroke-width="2"><path d="M6 2h8l4 4v16H6z"/></svg><span>Ver manual<small>'+esc(m.archivos.manual[0])+'</small></span></button>');
@@ -932,6 +983,41 @@ document.getElementById('velo').addEventListener('click',function(e){
     return;
   }
   // "⋯" = abrir este archivo con otro programa
+  // dejar la version editada como la principal del modelo
+  var pr=e.target.closest('[data-principal]');
+  if(pr&&actual){
+    api('/api/principal',{rel:actual.rel,nombre:pr.dataset.principal}).then(function(r){
+      if(r.ok){ toast('Listo: «'+r.principal+'» es ahora el archivo principal');
+                abrirModelo(actual.rel); cargar(); }
+      else toast(r.error||'No se pudo', true);
+    });
+    return;
+  }
+  var ig=e.target.closest('[data-ignorar]');
+  if(ig&&actual){
+    api('/api/principal/ignorar',{rel:actual.rel}).then(function(){
+      document.getElementById('dAviso').style.display='none';
+    });
+    return;
+  }
+
+  // los dos botones grandes: CorelDRAW y LightBurn
+  var ab=e.target.closest('[data-abrir-en]');
+  if(ab&&actual){
+    var quien=ab.dataset.abrirEn, txt=ab.querySelector('small');
+    var antes=txt?txt.textContent:'';
+    if(txt) txt.textContent='Preparando el archivo...';
+    ab.disabled=true;
+    api('/api/abrir-en?rel='+encodeURIComponent(actual.rel)+'&programa='+quien).then(function(r){
+      ab.disabled=false;
+      if(txt) txt.textContent=antes;
+      if(r.ok){
+        toast((r.convertido?'Convertido y abriendo en ':'Abriendo en ')+r.con+'...');
+      } else toast(r.error||'No se pudo', true);
+    });
+    return;
+  }
+
   var ot=e.target.closest('[data-otro]');
   if(ot&&actual){ elegirOtroPrograma(ot.dataset.otro); return; }
 
@@ -1270,11 +1356,23 @@ function verAjustes(){
 
 // -------- gestor de categorías y subcategorías --------
 function verCategorias(){
-  var h='';
-  (D.categorias||[]).forEach(function(c){
-    h+='<div class="catg"><div class="catg-h"><b>'+esc(c.nombre)+'</b>'
+  var cats=D.categorias||[], h='';
+  h+='<div class="barra" style="margin-bottom:12px">'
+    +'<button class="btn pri" id="catNueva">+ Categoría nueva</button>'
+    +'<button class="btn" id="catCarpeta">📁 Una carpeta entera a una categoría</button></div>';
+  cats.forEach(function(c,i){
+    h+='<div class="catg"><div class="catg-h">'
+      +'<span class="mover">'
+      +'<button class="fl" data-subir="'+esc(c.nombre)+'"'+(i===0?' disabled':'')+' title="Subir">▲</button>'
+      +'<button class="fl" data-bajar="'+esc(c.nombre)+'"'+(i===cats.length-1?' disabled':'')+' title="Bajar">▼</button>'
+      +'</span>'
+      +'<b>'+esc(c.nombre)+'</b>'
+      +(c.propia?'<span class="mia">tuya</span>':'')
       +'<span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span>'
-      +'<button class="btn mini" data-nuevasub="'+esc(c.nombre)+'">+ Subcategoría</button></div>';
+      +'<button class="btn mini" data-nuevasub="'+esc(c.nombre)+'">+ Subcategoría</button>'
+      +'<button class="bo" data-rencat="'+esc(c.nombre)+'" title="Cambiarle el nombre">✎</button>'
+      +'<button class="bx" data-borcat="'+esc(c.nombre)+'" title="Sacar esta categoría">✕</button>'
+      +'</div>';
     if(!c.subs.length) h+='<p class="sub" style="margin:6px 0 0">Sin subcategorías todavía.</p>';
     c.subs.forEach(function(s){
       h+='<div class="arch"><span class="an">'+esc(s.nombre)
@@ -1285,13 +1383,97 @@ function verCategorias(){
     h+='</div>';
   });
   document.getElementById('catsCont').innerHTML=h;
+  verReglas();
 }
+
+// las carpetas que el papa marco como "todo esto es de tal categoria"
+function verReglas(){
+  api('/api/reglas-carpeta').then(function(r){
+    var cont=document.getElementById('reglasCont'); if(!cont) return;
+    if(!(r.reglas||[]).length){
+      cont.innerHTML='<p class="sub" style="margin:0">Todavía no marcaste ninguna carpeta. '
+        +'Sirve para decir: <i>todo lo que está en esta carpeta es de tal categoría</i>.</p>';
+      return;
+    }
+    cont.innerHTML=r.reglas.map(function(x){
+      return '<div class="arch"><span class="ax">📁</span>'
+        +'<span class="an" style="white-space:normal"><b>'+esc(x.rel)+'</b><br>'
+        +'<small style="color:var(--tx3)">'+x.modelos.toLocaleString('es-CL')
+        +' modelos → '+esc(x.categoria)+(x.subcategoria?' › '+esc(x.subcategoria):'')+'</small></span>'
+        +'<button class="bx" data-quitaregla="'+esc(x.rel)+'" title="Quitar esta regla">✕</button></div>';
+    }).join('');
+  });
+}
+document.getElementById('reglasCont').addEventListener('click',function(e){
+  var q=e.target.closest('[data-quitaregla]'); if(!q) return;
+  if(!confirm('¿Quitar la regla de "'+q.dataset.quitaregla+'"?\n\n'
+    +'Sus modelos vuelven a ordenarse solos. No se borra ningún archivo.')) return;
+  api('/api/carpeta/desmarcar',{rel:q.dataset.quitaregla}).then(function(){
+    toast('Regla quitada');
+    cargar().then(function(){ verCategorias(); aplicar(); });
+  });
+});
 document.getElementById('catsCont').addEventListener('click',function(e){
   var refrescar=function(msg){ return function(r){
     if(!r.ok){ toast(r.error||'No se pudo',true); return; }
     toast(typeof msg==='function'?msg(r):msg);
     cargar().then(function(){ verCategorias(); aplicar(); });
   }};
+
+  var listaCats=function(){return (D.categorias||[]).map(function(c){return c.nombre})};
+
+  // crear una categoria grande
+  if(e.target.id==='catNueva'){
+    var nom=prompt('Nombre de la categoría nueva:');
+    if(nom&&nom.trim()) api('/api/categoria/crear',{nombre:nom.trim()}).then(refrescar('Categoría creada'));
+    return;
+  }
+  // marcar una carpeta entera
+  if(e.target.id==='catCarpeta'){
+    var cs=listaCats();
+    var cat=prompt('¿A qué categoría va a pertenecer toda la carpeta?\n\nCategorías: '+cs.join(', '), cs[0]||'');
+    if(!cat||!cat.trim()) return;
+    var ruta=prompt('Escribe o pega la ruta de la carpeta.\n\n'
+      +'Déjalo en blanco para buscarla con una ventana.\n'
+      +'Tiene que estar dentro de tu biblioteca.','');
+    if(ruta===null) return;
+    toast('Marcando la carpeta...');
+    api('/api/carpeta/marcar',{carpeta:ruta.trim(),categoria:cat.trim()})
+      .then(refrescar(function(r){return r.modelos.toLocaleString('es-CL')+' modelos quedaron en '+r.categoria}));
+    return;
+  }
+  // ordenar con las flechas
+  var su=e.target.closest('[data-subir]'), ba=e.target.closest('[data-bajar]');
+  if(su||ba){
+    var cs=listaCats();
+    var nom=(su?su.dataset.subir:ba.dataset.bajar), i=cs.indexOf(nom);
+    var j=su?i-1:i+1;
+    if(i<0||j<0||j>=cs.length) return;
+    cs[i]=cs[j]; cs[j]=nom;
+    api('/api/categoria/ordenar',{orden:cs}).then(refrescar('Orden guardado'));
+    return;
+  }
+  // renombrar categoria grande
+  var rc=e.target.closest('[data-rencat]');
+  if(rc){
+    var nv=prompt('Nombre nuevo para "'+rc.dataset.rencat+'":', rc.dataset.rencat);
+    if(nv&&nv.trim()) api('/api/categoria/renombrar',{vieja:rc.dataset.rencat,nueva:nv.trim()})
+      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos'}));
+    return;
+  }
+  // borrar categoria grande
+  var bc=e.target.closest('[data-borcat]');
+  if(bc){
+    var nom2=bc.dataset.borcat;
+    var otras=listaCats().filter(function(x){return x!==nom2});
+    var d=prompt('¿Sacar la categoría "'+nom2+'"?\n\nSus modelos NO se borran.\n'
+      +'Escribe a qué categoría los pasamos, o déjalo en blanco para que el programa\n'
+      +'los vuelva a ordenar solo.\n\nQue existen: '+otras.join(', '),'');
+    if(d===null) return;
+    api('/api/categoria/borrar',{nombre:nom2,destino:d.trim()})
+      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos '+(r.destino?('a '+r.destino):'reordenados solos')}));
+    return;
+  }
 
   var n=e.target.closest('[data-nuevasub]');
   if(n){

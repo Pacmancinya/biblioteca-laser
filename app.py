@@ -14,9 +14,10 @@ import base64, io          # los usa el conversor (miniaturas de LightBurn)
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
+import formatos
 
-APP_VERSION = "1.5"
-APP_NOMBRE = "Se reordena solo"   # nombre corto de esta versión, para reconocerla
+APP_VERSION = "2.0"
+APP_NOMBRE = "Programa de verdad"   # nombre corto de esta versión, para reconocerla
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -161,22 +162,71 @@ def ruta_segura(p):
 
 
 # ---------------------------------------------------------------- vista de modelos
+_REGLAS = None          # cache de las reglas "esta carpeta es de esta categoria"
+
+
+def recargar_reglas():
+    """Las reglas se guardan por ruta relativa, de la mas larga a la mas corta,
+    para que mande siempre la carpeta mas precisa."""
+    global _REGLAS
+    _REGLAS = [(r["rel"].replace("/", os.sep).strip(os.sep).lower(),
+                r["categoria"], r["subcategoria"])
+               for r in db.reglas_carpeta()]
+    _REGLAS.sort(key=lambda x: -len(x[0]))
+    return _REGLAS
+
+
+def regla_de(rel):
+    """Si el modelo esta dentro de una carpeta marcada, devuelve su categoria."""
+    if _REGLAS is None:
+        recargar_reglas()
+    if not _REGLAS:
+        return None
+    r = rel.replace("/", os.sep).strip(os.sep).lower()
+    for carpeta, cat, sub in _REGLAS:
+        if r == carpeta or r.startswith(carpeta + os.sep):
+            return cat, sub
+    return None
+
+
+_EXT_DIBUJABLES = {".svg", ".dxf", ".eps", ".ai", ".lbrn", ".lbrn2"}
+
+
 def modelo_vista(m, metas=None):
-    """Mezcla el modelo del disco con lo que el usuario editó."""
+    """Mezcla el modelo del disco con lo que el usuario editó.
+
+    Quien manda sobre la categoría, de mayor a menor:
+      1. lo que el usuario corrigió en ESE modelo
+      2. la regla "esta carpeta es de esta categoría" (la más precisa)
+      3. lo que adivinó el clasificador al leer el disco
+    """
     metas = metas if metas is not None else db.meta_todos()
     mt = metas.get(m["rel"]) or {}
     partes = m["ruta_partes"]
+
+    cat = mt.get("categoria")
+    sub = mt.get("subcategoria")
+    if not cat:
+        r = regla_de(m["rel"])
+        if r:
+            cat = r[0]
+            if sub is None and r[1]:
+                sub = r[1]
+
     return {
         "rel": m["rel"], "id": m["id"],
         "n": mt.get("nombre") or m["nombre"],
         "n_orig": m["nombre"],
-        "c": mt.get("categoria") or m["categoria"],
-        "s": mt.get("subcategoria") if mt.get("subcategoria") is not None else m["subcategoria"],
+        "c": cat or m["categoria"],
+        "s": sub if sub is not None else m["subcategoria"],
         "ruta_partes": partes,
         "fmt": m["formatos"], "gr": m["grosores"],
         "img": 1 if m["tiene_imagen"] else 0, "man": 1 if m["tiene_manual"] else 0,
-        # hay algo que mostrar: una foto, o la miniatura que trae el archivo de LightBurn
-        "prev": 1 if (m["tiene_imagen"] or m["tiene_lightburn"]) else 0,
+        # hay algo que mostrar: una foto, la miniatura del archivo de LightBurn,
+        # o el dibujo del propio modelo
+        "prev": 1 if (m["tiene_imagen"] or m["tiene_lightburn"]
+                      or any(os.path.splitext(a)[1].lower() in _EXT_DIBUJABLES
+                             for a in m["archivos"]["corte"])) else 0,
         "lb": 1 if m["tiene_lightburn"] else 0, "d3": 1 if m["tiene_3d"] else 0,
         "fav": 1 if mt.get("favorito") else 0,
         "oculto": 1 if mt.get("oculto") else 0,
@@ -230,8 +280,229 @@ def categorias_con_conteo(vistas):
         subs = [{"nombre": s, "n": conteo_sub.get((c, s), 0), "propia": True} for s in nombres]
         salida.append({"nombre": c, "n": conteo.get(c, 0), "propia": True,
                        "subs": [s for s in subs if visible(c, s["nombre"], s["n"])]})
+    # categorías que el usuario invento y todavia estan vacias
+    orden_usuario, ocultas_cat, propias_cat = db.cats_propias()
+    for c in propias_cat:
+        if c not in hechas:
+            salida.append({"nombre": c, "n": conteo.get(c, 0), "propia": True, "subs": []})
+            hechas.add(c)
+
     # una categoría vacía solo se muestra si el usuario la creó
-    return [g for g in salida if g["n"] > 0 or g.get("subs")]
+    salida = [g for g in salida
+              if (g["n"] > 0 or g.get("subs") or g["nombre"] in propias_cat)
+              and g["nombre"] not in ocultas_cat]
+
+    # y en el orden en que el usuario las dejó
+    base = {g["nombre"]: i for i, g in enumerate(cats.estructura())}
+    def clave(g):
+        n = g["nombre"]
+        if n in orden_usuario:
+            return (0, orden_usuario[n])
+        if n in base:
+            return (1, base[n])
+        return (2, n.lower())
+    salida.sort(key=clave)
+    for g in salida:
+        g["propia"] = g["nombre"] in propias_cat
+    return salida
+
+
+def crear_categoria(nombre):
+    nombre = (nombre or "").strip()
+    if not nombre:
+        return {"error": "Escribe el nombre de la categoría."}
+    if len(nombre) > 40:
+        return {"error": "El nombre es muy largo."}
+    actuales = [g["nombre"] for g in categorias_con_conteo(vistas_todas())]
+    if nombre in actuales:
+        return {"error": "Ya existe una categoría con ese nombre."}
+    db.guardar_cat(nombre, orden=len(actuales), propia=True, oculta=False)
+    return {"ok": True, "nombre": nombre}
+
+
+def borrar_categoria(nombre, destino=""):
+    """Saca una categoría grande. Sus modelos pasan a `destino`, o vuelven a
+    donde los pondría el programa solo. Nunca se borra nada del disco."""
+    nombre = (nombre or "").strip()
+    destino = (destino or "").strip()
+    if not nombre:
+        return {"error": "falta la categoría"}
+    vistas = vistas_todas()
+    afectados = [v for v in vistas if v["c"] == nombre]
+    if len(afectados) > 20:
+        respaldar_base()
+    for v in afectados:
+        if destino:
+            db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": ""})
+        else:
+            # volver a lo automatico: se borra la correccion del usuario
+            db.guardar_meta(v["rel"], {"categoria": "", "subcategoria": ""})
+    # y las reglas de carpeta que apuntaban ahi
+    for r in db.reglas_carpeta():
+        if r["categoria"] == nombre:
+            db.borrar_regla(r["rel"])
+    recargar_reglas()
+    import categorias as cats
+    if nombre in [g["nombre"] for g in cats.estructura()]:
+        db.guardar_cat(nombre, oculta=True, propia=False)   # de fabrica: se tapa
+    else:
+        db.quitar_cat(nombre)
+    return {"ok": True, "movidos": len(afectados), "destino": destino}
+
+
+def renombrar_categoria(viejo, nuevo):
+    viejo, nuevo = (viejo or "").strip(), (nuevo or "").strip()
+    if not viejo or not nuevo:
+        return {"error": "Faltan los nombres."}
+    if viejo == nuevo:
+        return {"ok": True, "movidos": 0}
+    vistas = vistas_todas()
+    afectados = [v for v in vistas if v["c"] == viejo]
+    if len(afectados) > 20:
+        respaldar_base()
+    for v in afectados:
+        db.guardar_meta(v["rel"], {"categoria": nuevo})
+    for r in db.reglas_carpeta():
+        if r["categoria"] == viejo:
+            db.guardar_regla(r["rel"], nuevo, r["subcategoria"])
+    recargar_reglas()
+    orden, _oc, _pr = db.cats_propias()
+    db.guardar_cat(nuevo, orden=orden.get(viejo, 999), propia=True)
+    import categorias as cats
+    if viejo in [g["nombre"] for g in cats.estructura()]:
+        db.guardar_cat(viejo, oculta=True)
+    else:
+        db.quitar_cat(viejo)
+    return {"ok": True, "movidos": len(afectados)}
+
+
+def vistas_todas():
+    metas = db.meta_todos()
+    return [modelo_vista(m, metas) for m in MODELOS]
+
+
+def marcar_carpeta(ruta, categoria, subcategoria=""):
+    """Deja una carpeta entera dentro de una categoría."""
+    categoria = (categoria or "").strip()
+    if not categoria:
+        return {"error": "Elige la categoría."}
+    ruta = (ruta or "").strip().strip('"').strip()
+    if not ruta:
+        return {"error": "Elige la carpeta."}
+    if not os.path.isdir(ruta):
+        return {"error": "No encuentro esa carpeta: %s" % ruta}
+    if not RAIZ:
+        return {"error": "Todavía no hay biblioteca configurada."}
+    try:
+        rel = os.path.relpath(os.path.abspath(ruta), os.path.abspath(RAIZ))
+    except ValueError:
+        return {"error": "Esa carpeta está en otro disco que la biblioteca."}
+    if rel.startswith(".."):
+        return {"error": "Esa carpeta tiene que estar dentro de tu biblioteca: %s" % RAIZ}
+    if rel == ".":
+        return {"error": "Esa es la carpeta principal: elige una de adentro."}
+
+    db.guardar_regla(rel, categoria, subcategoria)
+    recargar_reglas()
+    cuantos = sum(1 for m in MODELOS
+                  if m["rel"].lower() == rel.lower()
+                  or m["rel"].lower().startswith(rel.lower() + os.sep))
+    return {"ok": True, "rel": rel, "categoria": categoria, "modelos": cuantos}
+
+
+# ------------------------------- lo que se edita en CorelDRAW pasa a ser lo bueno
+# Cuando el papa abre un modelo en CorelDRAW, guardamos como estaba el archivo.
+# Al volver a la ficha, si lo ve cambiado, ofrece dejar esa version como la
+# principal del modelo.
+_VIGILADOS = {}          # rel -> {"archivo": ruta, "antes": (tam, fecha), "cuando": t}
+
+
+def vigilar(rel, ruta):
+    """Anota como esta un archivo justo antes de abrirlo en un programa."""
+    try:
+        st = os.stat(ruta)
+        _VIGILADOS[rel] = {"archivo": ruta, "antes": (st.st_size, int(st.st_mtime)),
+                           "cuando": time.time(),
+                           "carpeta": os.path.dirname(ruta),
+                           "habia": set(os.listdir(os.path.dirname(ruta)))}
+    except OSError:
+        pass
+
+
+def revisar_cambios(rel):
+    """¿Cambio algo desde que lo abrimos? Devuelve que encontro."""
+    v = _VIGILADOS.get(rel)
+    if not v:
+        return None
+    salida = {"editado": None, "nuevos": []}
+    try:
+        st = os.stat(v["archivo"])
+        if (st.st_size, int(st.st_mtime)) != v["antes"]:
+            salida["editado"] = os.path.basename(v["archivo"])
+    except OSError:
+        pass
+    # CorelDRAW a veces guarda un archivo nuevo (.cdr) en vez de pisar el que abrio
+    try:
+        ahora = set(os.listdir(v["carpeta"]))
+        for n in sorted(ahora - v["habia"]):
+            ext = os.path.splitext(n)[1].lower()
+            if ext in (".cdr", ".svg", ".ai", ".eps", ".dxf", ".pdf", ".lbrn", ".lbrn2"):
+                salida["nuevos"].append(n)
+    except OSError:
+        pass
+    if not salida["editado"] and not salida["nuevos"]:
+        return None
+    return salida
+
+
+def hacer_principal(rel, nombre):
+    """Deja ese archivo como el principal del modelo: es el que se abre y del
+    que sale la vista previa. Guarda la version anterior por si se arrepiente."""
+    m = POR_REL.get(rel)
+    if not m:
+        return {"error": "no existe ese modelo"}
+    origen = os.path.join(m["ruta"], nombre)
+    if not ruta_segura(origen) or not os.path.exists(origen):
+        return {"error": "no encuentro ese archivo"}
+
+    corte = m["archivos"]["corte"]
+    ext = os.path.splitext(nombre)[1].lower()
+    if ext not in [e.lower() for e in
+                   (".svg", ".dxf", ".eps", ".ai", ".cdr", ".cmx", ".lbrn", ".lbrn2", ".plt", ".dwg")]:
+        return {"error": "ese archivo no es un dibujo para cortar"}
+
+    # que quede primero en la lista: asi lo toma todo lo demas
+    if nombre in corte:
+        corte.remove(nombre)
+    corte.insert(0, nombre)
+    m["archivos"]["corte"] = corte
+    m["n_corte"] = len(corte)
+    m["formatos"] = sorted({os.path.splitext(f)[1].lower().lstrip(".") for f in corte})
+    m["tiene_lightburn"] = any(f.lower().endswith((".lbrn", ".lbrn2")) for f in corte)
+    guardar_indice()
+
+    db.guardar_meta(rel, {"principal": nombre})
+    db.registrar_version(rel, "principal", nombre, "")
+
+    # la vista previa vieja ya no vale
+    try:
+        h = hashlib.md5(rel.encode("utf-8")).hexdigest()
+        thumb = os.path.join(CACHE_THUMBS, h + ".jpg")
+        if os.path.exists(thumb):
+            os.remove(thumb)
+    except OSError:
+        pass
+    _VIGILADOS.pop(rel, None)
+    return {"ok": True, "principal": nombre}
+
+
+def guardar_indice():
+    """Graba biblioteca.json despues de un cambio hecho desde la app."""
+    try:
+        with open(INDICE, "w", encoding="utf-8") as f:
+            json.dump(DATOS, f, ensure_ascii=False)
+    except Exception:
+        pass
 
 
 def _la_pone_el_programa(cat, sub):
@@ -307,13 +578,24 @@ def miniatura(rel):
         return None
     origen = os.path.join(m["ruta"], m["preview"]) if m.get("preview") else ""
     lbrn = None
+    dibujo = None
     if not origen or not os.path.exists(origen):
         lbrn = vista_previa_lightburn(m)      # no hay foto: probamos con LightBurn
-        if not lbrn:
-            return None
-        origen = lbrn
-    if not HAY_PIL:
         if lbrn:
+            origen = lbrn
+        else:
+            # tampoco hay: dibujamos el modelo a partir del archivo de corte
+            for a in (m["archivos"]["corte"] or []):
+                p = os.path.join(m["ruta"], a)
+                if (os.path.splitext(a)[1].lower() in formatos.LEIBLES
+                        and os.path.exists(p) and os.path.getsize(p) < 12_000_000):
+                    dibujo = p
+                    break
+            if not dibujo:
+                return None
+            origen = dibujo
+    if not HAY_PIL:
+        if lbrn or dibujo:
             return None
         with open(origen, "rb") as f:
             return f.read(), mimetypes.guess_type(origen)[0] or "image/jpeg"
@@ -321,7 +603,11 @@ def miniatura(rel):
     destino = os.path.join(CACHE_THUMBS, h + ".jpg")
     try:
         if not os.path.exists(destino) or os.path.getmtime(destino) < os.path.getmtime(origen):
-            if lbrn:
+            if dibujo:
+                if not formatos.dibujar_previa(origen, destino):
+                    return None
+                im = Image.open(destino).convert("RGB")
+            elif lbrn:
                 res = miniatura_lightburn(origen, destino + ".png")
                 if not res.get("ok"):
                     return None
@@ -1196,6 +1482,26 @@ class Handler(BaseHTTPRequestHandler):
                                     "nombre": PROGRAMAS_DEF[clave]["nombre"],
                                     "instalado": bool(exe)}
             d["programas"] = progs
+            # que pasaria al apretar cada boton grande: ya lo tiene, hay que
+            # convertir, o de plano no se puede
+            corte = m["archivos"]["corte"]
+            d["cambios"] = revisar_cambios(rel)
+            d["principal"] = (d["meta"] or {}).get("principal") or ""
+            d["abrir_en"] = {}
+            for cual, fmt in (("corel", "svg"), ("lightburn", "lbrn")):
+                nombre, ya = formatos.mejor_origen(corte, m["ruta"], fmt)
+                ext = os.path.splitext(nombre or "")[1].lower()
+                puede = bool(nombre) and (ya or ext not in formatos.CERRADOS)
+                d["abrir_en"][cual] = {
+                    "puede": puede,
+                    "convierte": bool(nombre) and not ya and puede,
+                    "desde": ext.lstrip(".") if nombre else "",
+                    "instalado": bool(buscar_programa(cual)),
+                    "motivo": ("" if puede else
+                               ("Este modelo solo viene en %s, que solo abre CorelDRAW."
+                                % ext if ext in formatos.CERRADOS
+                                else "Este modelo no trae archivos para cortar.")),
+                }
             return self._send(200, d)
 
         if r == "/thumb":
@@ -1233,6 +1539,57 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, "con": "Windows"})
             except Exception as e:
                 return self._send(500, {"error": str(e)})
+
+        if r == "/api/abrir-en":
+            # Los dos botones grandes: cada programa recibe el formato que le
+            # sirve. Si el modelo no lo tiene, se convierte en el momento.
+            rel, cual = arg("rel"), arg("programa")
+            m = POR_REL.get(rel)
+            if not m:
+                return self._send(404, {"error": "no existe ese modelo"})
+            if cual not in ("corel", "lightburn"):
+                return self._send(400, {"error": "programa no valido"})
+
+            destino = "svg" if cual == "corel" else "lbrn"
+            ruta, err, convertido = formatos.preparar(
+                m["ruta"], m["archivos"]["corte"], destino)
+            if err:
+                return self._send(400, {"error": err})
+
+            exe = buscar_programa(cual)
+            nombre = PROGRAMAS_DEF[cual]["nombre"]
+            if not exe:
+                # Sin el programa, Windows abre el cartel "Elegir una aplicacion",
+                # que confunde. Mejor decirlo claro.
+                return self._send(404, {
+                    "error": "No encuentro %s en este computador. Si lo tienes "
+                             "instalado, indicale a la app donde esta en "
+                             "Ajustes > Programas." % nombre,
+                    "falta_programa": cual})
+            try:
+                subprocess.Popen([exe, ruta])
+                # anotamos como estaba, para avisar despues si lo edito
+                origen_real = os.path.join(m["ruta"], os.path.basename(ruta))
+                vigilar(rel, origen_real if os.path.exists(origen_real) else ruta)
+            except Exception as e:
+                return self._send(500, {"error": "No pude abrirlo: %s" % str(e)[:120]})
+            return self._send(200, {
+                "ok": True, "con": nombre if exe else "Windows",
+                "archivo": os.path.basename(ruta),
+                "convertido": convertido,
+                "instalado": bool(exe),
+            })
+
+        if r == "/api/reglas-carpeta":
+            reglas = []
+            for x in db.reglas_carpeta():
+                rel = x["rel"]
+                n = sum(1 for m in MODELOS
+                        if m["rel"].lower() == rel.lower()
+                        or m["rel"].lower().startswith(rel.lower() + os.sep))
+                reglas.append({"rel": rel, "categoria": x["categoria"],
+                               "subcategoria": x["subcategoria"], "modelos": n})
+            return self._send(200, {"reglas": reglas, "raiz": RAIZ})
 
         if r == "/api/programas":
             return self._send(200, {"programas": programas_estado(),
@@ -1463,6 +1820,58 @@ class Handler(BaseHTTPRequestHandler):
                                      os.path.basename(res["archivo"]), "")
             return self._send(200 if res.get("ok") else 400, res)
 
+        if r == "/api/principal":
+            d = self._json()
+            res = hacer_principal(d.get("rel", ""), d.get("nombre", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/principal/ignorar":
+            _VIGILADOS.pop(self._json().get("rel", ""), None)
+            return self._send(200, {"ok": True})
+
+        if r == "/api/categoria/crear":
+            res = crear_categoria(self._json().get("nombre", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/categoria/borrar":
+            d = self._json()
+            res = borrar_categoria(d.get("nombre"), d.get("destino", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/categoria/renombrar":
+            d = self._json()
+            res = renombrar_categoria(d.get("vieja"), d.get("nueva"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/categoria/ordenar":
+            nombres = self._json().get("orden") or []
+            if not isinstance(nombres, list) or not nombres:
+                return self._send(400, {"error": "orden no valido"})
+            db.ordenar_cats([str(n) for n in nombres])
+            return self._send(200, {"ok": True})
+
+        if r == "/api/carpeta/marcar":
+            d = self._json()
+            ruta = d.get("carpeta")
+            if not ruta:
+                # sin ruta escrita, se abre el buscador de carpetas de Windows
+                try:
+                    rr = subprocess.run(
+                        [python_con_ventanas(), os.path.join(BASE, "elegir_carpeta.py"), RAIZ or ""],
+                        cwd=BASE, capture_output=True, text=True, timeout=300)
+                    ruta = (rr.stdout or "").strip()
+                except Exception as e:
+                    return self._send(400, {"error": "No pude abrir la ventana: %s" % str(e)[:90]})
+                if not ruta:
+                    return self._send(400, {"error": "No elegiste ninguna carpeta."})
+            res = marcar_carpeta(ruta, d.get("categoria"), d.get("subcategoria", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/carpeta/desmarcar":
+            db.borrar_regla(self._json().get("rel", ""))
+            recargar_reglas()
+            return self._send(200, {"ok": True})
+
         if r == "/api/subcategoria/crear":
             d = self._json()
             cat = (d.get("categoria") or "").strip()
@@ -1572,10 +1981,43 @@ def reordenar_si_hace_falta():
     return True
 
 
-def main():
+def preparar(avisar=None):
+    """Deja todo listo antes de mostrar la biblioteca.
+    `avisar` es una funcion opcional para contar en que va (la usa la ventana)."""
+    di = avisar or (lambda t: None)
+    di("Abriendo tus datos...")
     db.cx()
     db.sembrar_costos()
+    di("Revisando el orden de las categorias...")
     reordenar_si_hace_falta()
+    try:
+        formatos.limpiar_cache()
+    except Exception:
+        pass
+    di("Listo")
+
+
+def arrancar_servidor():
+    """Levanta el servidor en segundo plano y devuelve (servidor, direccion).
+    Si el puerto esta ocupado, busca otro: asi no falla si quedo algo abierto."""
+    global PUERTO
+    ultimo = None
+    for intento in range(12):
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", PUERTO), Handler)
+            break
+        except OSError as e:
+            ultimo = e
+            PUERTO += 1
+    else:
+        raise ultimo
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, "http://127.0.0.1:%d" % PUERTO
+
+
+def main():
+    """Modo consola: se usa como respaldo si la ventana no abre."""
+    preparar()
     print("=" * 54)
     print("  BIBLIOTECA LASER")
     print("=" * 54)

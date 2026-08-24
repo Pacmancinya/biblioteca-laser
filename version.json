@@ -1,6 +1,6 @@
 {
-  "version": "1.5",
-  "nombre": "Se reordena solo",
-  "novedades": "Arregla lo de la actualización anterior: las categorías nuevas no se aplicaban hasta volver a leer la carpeta, así que todo seguía igual de desordenado. Ahora, al abrir la app después de actualizar, los modelos se reordenan solos. Además llega el conversor de archivos, que en la 1.4 se quedó afuera del paquete por error.",
+  "version": "2.0",
+  "nombre": "Programa de verdad",
+  "novedades": "Ahora es un programa normal de Windows: doble clic y se abre en su propia ventana. Se acabó el navegador y la ventana negra. Cada modelo tiene dos botones grandes: Abrir en CorelDRAW (siempre en SVG) y Abrir en LightBurn (siempre en .lbrn); si el modelo no trae ese formato, se convierte solo en el momento. Lo que guardes en CorelDRAW puedes dejarlo como la versión principal del modelo. Y ahora puedes crear, renombrar, ordenar y sacar las categorías grandes, además de marcar una carpeta entera para que todo lo de adentro quede en la categoría que tú quieras.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS modelos (
   subcategoria TEXT,
   notas        TEXT,
   favorito     INTEGER DEFAULT 0,
+  principal    TEXT,
   oculto       INTEGER DEFAULT 0,
   costo        REAL,
   precio       REAL,
@@ -134,6 +135,24 @@ CREATE TABLE IF NOT EXISTS huellas (
   hash  TEXT
 );
 
+-- Categorías grandes: las que el usuario crea, esconde o reordena.
+-- Las "de fábrica" solo aparecen aquí si les cambió algo.
+CREATE TABLE IF NOT EXISTS cats (
+  nombre TEXT PRIMARY KEY,
+  orden  INTEGER DEFAULT 0,
+  propia INTEGER DEFAULT 0,     -- 1 = la invento el usuario
+  oculta INTEGER DEFAULT 0
+);
+
+-- "Esta carpeta es de esta categoría": todo lo que esté dentro pertenece
+-- ahí. La ruta se guarda RELATIVA a la biblioteca, para que siga sirviendo
+-- si el usuario mueve la carpeta de modelos a otro disco.
+CREATE TABLE IF NOT EXISTS reglas_carpeta (
+  rel          TEXT PRIMARY KEY,
+  categoria    TEXT,
+  subcategoria TEXT
+);
+
 -- Subcategorías que creó el usuario. Se guardan aparte para que existan
 -- aunque todavía no tengan ningún modelo dentro.
 CREATE TABLE IF NOT EXISTS subcats (
@@ -159,7 +178,7 @@ def conectar():
 
 def migrar(cx):
     """Agrega columnas nuevas a bases creadas por versiones anteriores."""
-    faltantes = {"oculto": "INTEGER DEFAULT 0"}
+    faltantes = {"oculto": "INTEGER DEFAULT 0", "principal": "TEXT"}
     existentes = {r[1] for r in cx.execute("PRAGMA table_info(modelos)").fetchall()}
     for col, tipo in faltantes.items():
         if col not in existentes:
@@ -205,7 +224,7 @@ def meta(rel):
 def guardar_meta(rel, campos):
     """Crea o actualiza los metadatos de un modelo."""
     permitidos = {"nombre", "categoria", "subcategoria", "notas", "favorito",
-                  "costo", "precio", "stock", "cliente_id", "oculto"}
+                  "costo", "precio", "stock", "cliente_id", "oculto", "principal"}
     campos = {k: v for k, v in campos.items() if k in permitidos}
     if not campos:
         return
@@ -223,6 +242,59 @@ def alternar_oculto(rel):
 
 def ocultos():
     return filas("SELECT rel, nombre FROM modelos WHERE oculto=1")
+
+
+# ------------------------------------------------ categorías del usuario
+def cats_propias():
+    """Lo que el usuario cambió de las categorías grandes: orden, cuáles
+    escondió y cuáles inventó."""
+    orden, ocultas, propias = {}, set(), set()
+    for r in filas("SELECT * FROM cats"):
+        orden[r["nombre"]] = r["orden"]
+        if r["oculta"]:
+            ocultas.add(r["nombre"])
+        if r["propia"]:
+            propias.add(r["nombre"])
+    return orden, ocultas, propias
+
+
+def guardar_cat(nombre, orden=None, propia=None, oculta=None):
+    """Crea o actualiza una categoría grande, sin pisar lo que no se pasa."""
+    r = fila("SELECT * FROM cats WHERE nombre=?", (nombre,))
+    if not r:
+        ejecutar("INSERT INTO cats (nombre, orden, propia, oculta) VALUES (?,?,?,?)",
+                 (nombre, orden if orden is not None else 999,
+                  1 if propia else 0, 1 if oculta else 0))
+        return
+    ejecutar("UPDATE cats SET orden=?, propia=?, oculta=? WHERE nombre=?",
+             (r["orden"] if orden is None else orden,
+              r["propia"] if propia is None else (1 if propia else 0),
+              r["oculta"] if oculta is None else (1 if oculta else 0),
+              nombre))
+
+
+def quitar_cat(nombre):
+    ejecutar("DELETE FROM cats WHERE nombre=?", (nombre,))
+
+
+def ordenar_cats(nombres):
+    """Guarda el orden en que el usuario dejó las categorías."""
+    for i, n in enumerate(nombres):
+        guardar_cat(n, orden=i)
+
+
+# ------------------------------------------- "esta carpeta es de esta categoría"
+def reglas_carpeta():
+    return filas("SELECT * FROM reglas_carpeta ORDER BY LENGTH(rel) DESC")
+
+
+def guardar_regla(rel, categoria, subcategoria=""):
+    ejecutar("INSERT OR REPLACE INTO reglas_carpeta (rel, categoria, subcategoria) "
+             "VALUES (?,?,?)", (rel, categoria, subcategoria or ""))
+
+
+def borrar_regla(rel):
+    ejecutar("DELETE FROM reglas_carpeta WHERE rel=?", (rel,))
 
 
 # ------------------------------------------------- subcategorías del usuario

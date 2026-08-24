@@ -1,14 +1,17 @@
 # datos de cada computador (no se comparten)
-config.json
-biblioteca.json
-biblioteca.db
-biblioteca.db-wal
-biblioteca.db-shm
-respaldos/
+*.pyc
 .miniaturas/
-_papelera/
-_paquete/
-_version_anterior/
 .venv/
 __pycache__/
-*.pyc
+_convertidos/
+_exe/
+_papelera/
+_paquete/
+_ventana/
+_version_anterior/
+biblioteca.db
+biblioteca.db-shm
+biblioteca.db-wal
+biblioteca.json
+config.json
+respaldos/
