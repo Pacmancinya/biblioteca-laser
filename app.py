@@ -18,8 +18,8 @@ import formatos
 
 CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
 
-APP_VERSION = "2.0.1"
-APP_NOMBRE = "Icono en el Escritorio"   # nombre corto de esta versión, para reconocerla
+APP_VERSION = "2.1"
+APP_NOMBRE = "Mas comodo"   # nombre corto de esta versión, para reconocerla
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -100,15 +100,73 @@ def buscar_lightburn():
 # Qué programa abre cada tipo de archivo. El usuario puede cambiarlo en Ajustes.
 PROGRAMAS_DEF = {
     "lightburn": {"nombre": "LightBurn", "exts": [".lbrn", ".lbrn2"],
+                  "exes": ["LightBurn.exe"],
+                  "propias": [".lbrn2", ".lbrn"],
                   "buscar": ["LightBurn/LightBurn.exe"]},
-    "corel":     {"nombre": "CorelDRAW", "exts": [".svg", ".cdr", ".ai", ".eps", ".cmx"],
+    "corel":     {"nombre": "CorelDRAW", "exts": [".cdr", ".cmx", ".svg", ".ai", ".eps"],
+                  "exes": ["CorelDRW.exe", "CorelDraw.exe"],
+                  # OJO: solo .cdr y .cmx sirven para BUSCARLO. Con .svg se
+                  # encontraba el navegador, porque muchos PCs lo abren ahi.
+                  "propias": [".cdr", ".cmx"],
                   "buscar": ["Corel/CorelDRAW Graphics Suite */Programs64/CorelDRW.exe",
                              "Corel/CorelDRAW Graphics Suite */Programs/CorelDRW.exe",
                              "Corel/CorelDRAW*/Programs64/CorelDRW.exe",
                              "Corel/CorelDRAW*/Programs/CorelDRW.exe"]},
     "inkscape":  {"nombre": "Inkscape", "exts": [],
+                  "exes": ["inkscape.exe"],
+                  "propias": [],
                   "buscar": ["Inkscape/bin/inkscape.exe", "Inkscape/inkscape.exe"]},
 }
+
+
+def _buscar_en_registro(exes):
+    """Busca un programa donde Windows anota los instalados.
+
+    Es mucho más confiable que adivinar carpetas: CorelDRAW cambia de ruta
+    en cada versión ("Graphics Suite 2021", "X8", "2024"...) y además puede
+    estar en otro disco.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    ramas = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths"),
+    ]
+    for raiz, ruta in ramas:
+        for exe in exes:
+            try:
+                with winreg.OpenKey(raiz, ruta + "\\" + exe) as k:
+                    valor = winreg.QueryValueEx(k, "")[0]
+                    valor = (valor or "").strip('"')
+                    if valor and os.path.exists(valor):
+                        return valor
+            except OSError:
+                continue
+    return ""
+
+
+def _buscar_por_extension(ext):
+    """Con qué programa abre Windows ese tipo de archivo (ej. .cdr)."""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, ext) as k:
+            tipo = winreg.QueryValueEx(k, "")[0]
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT,
+                            tipo + r"\shell\open\command") as k:
+            cmd = winreg.QueryValueEx(k, "")[0]
+    except OSError:
+        return ""
+    # el comando viene como:  "C:\...\CorelDRW.exe" "%1"
+    m = re.match(r'\s*"([^"]+)"', cmd or "")
+    ruta = m.group(1) if m else (cmd or "").split()[0].strip('"')
+    return ruta if ruta and os.path.exists(ruta) else ""
 
 
 def buscar_programa(clave):
@@ -120,6 +178,25 @@ def buscar_programa(clave):
     p = guardados.get(clave)
     if p and os.path.exists(p):
         return p
+    # 1) donde Windows anota los programas instalados (lo mas confiable)
+    d = PROGRAMAS_DEF.get(clave, {})
+    esperados = [e.lower() for e in d.get("exes", [])]
+    hallado = _buscar_en_registro(d.get("exes", []))
+    if not hallado:
+        for ext in d.get("propias", []):
+            candidato = _buscar_por_extension(ext)
+            # que de verdad sea el programa que buscamos y no el que el
+            # usuario tenga asociado a ese tipo de archivo
+            if candidato and os.path.basename(candidato).lower() in esperados:
+                hallado = candidato
+                break
+    if hallado:
+        guardados[clave] = hallado
+        CFG["programas"] = guardados
+        guardar_config(CFG)
+        return hallado
+
+    # 2) si no, se buscan las carpetas de siempre
     import glob
     bases = [os.environ.get("ProgramFiles", r"C:\Program Files"),
              os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
@@ -163,12 +240,30 @@ def programa_para(archivo):
     return "", ""
 
 
+def raices():
+    """Todas las carpetas de modelos: la principal y las agregadas."""
+    r = DATOS.get("raices")
+    if r:
+        return [x for x in r if x]
+    return [RAIZ] if RAIZ else []
+
+
 def ruta_segura(p):
+    """Solo se puede tocar lo que este dentro de alguna carpeta de modelos
+    (o de la carpeta del programa, para los archivos convertidos)."""
     try:
         p = os.path.abspath(p)
-        return os.path.commonpath([os.path.abspath(RAIZ), p]) == os.path.abspath(RAIZ)
     except Exception:
         return False
+    permitidas = [x for x in raices() if x] + [BASE]
+    for base in permitidas:
+        try:
+            b = os.path.abspath(base)
+            if os.path.commonpath([b, p]) == b:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 # ---------------------------------------------------------------- vista de modelos
@@ -1269,6 +1364,67 @@ def indexar_ahora(carpeta=None):
         return False, str(e)[:150]
 
 
+def agregar_carpeta(ruta=None):
+    """Suma otra carpeta de modelos, sin perder la que ya estaba."""
+    if not ruta:
+        ruta, err = pedir_carpeta()
+        if not ruta:
+            return {"error": "No elegiste ninguna carpeta."
+                    if err in ("", "cancelado") else err}
+    ruta = ruta.strip().strip('"').strip()
+    if not os.path.isdir(ruta):
+        return {"error": "No encuentro esa carpeta: %s" % ruta}
+
+    actuales = raices()
+    igual = [x for x in actuales if os.path.abspath(x).lower() == os.path.abspath(ruta).lower()]
+    if igual:
+        return {"error": "Esa carpeta ya está en la biblioteca."}
+    # que no sea una carpeta que ya esta adentro de otra
+    for x in actuales:
+        try:
+            if os.path.commonpath([os.path.abspath(x), os.path.abspath(ruta)]) == os.path.abspath(x):
+                return {"error": "Esa carpeta ya está adentro de «%s», así que sus "
+                                 "modelos ya aparecen." % os.path.basename(x)}
+        except Exception:
+            pass
+
+    cfg = cargar_config()
+    if not cfg.get("biblioteca"):
+        cfg["biblioteca"] = ruta
+    else:
+        extra = list(cfg.get("bibliotecas_extra") or [])
+        extra.append(ruta)
+        cfg["bibliotecas_extra"] = extra
+    guardar_config(cfg)
+
+    listo, err = indexar_ahora()
+    if not listo:
+        return {"error": err or "no pude leer esa carpeta"}
+    recargar_indice()
+    return {"ok": True, "carpeta": ruta, "total": len(MODELOS), "carpetas": len(raices())}
+
+
+def quitar_carpeta(ruta):
+    """Saca una carpeta de la biblioteca. No borra nada del disco."""
+    ruta = (ruta or "").strip()
+    if not ruta:
+        return {"error": "falta la carpeta"}
+    cfg = cargar_config()
+    principal = cfg.get("biblioteca") or ""
+    if os.path.abspath(ruta).lower() == os.path.abspath(principal).lower():
+        return {"error": "Esa es la carpeta principal. Para cambiarla usa "
+                         "«Elegir otra carpeta»."}
+    extra = [x for x in (cfg.get("bibliotecas_extra") or [])
+             if os.path.abspath(x).lower() != os.path.abspath(ruta).lower()]
+    cfg["bibliotecas_extra"] = extra
+    guardar_config(cfg)
+    listo, err = indexar_ahora()
+    if not listo:
+        return {"error": err or "no pude releer las carpetas"}
+    recargar_indice()
+    return {"ok": True, "total": len(MODELOS), "carpetas": len(raices())}
+
+
 def cambiar_carpeta(nueva=None):
     """Cambia la carpeta de modelos y vuelve a indexar.
     Si no se pasa ruta, abre el selector de carpetas de Windows."""
@@ -1550,6 +1706,9 @@ class Handler(BaseHTTPRequestHandler):
                 "categorias": categorias_con_conteo(vistas),
                 "total": len(vistas),
                 "raiz": RAIZ,
+                "raices": [{"ruta": x, "principal": (i == 0),
+                            "modelos": sum(1 for m in MODELOS if m.get("raiz", RAIZ) == x)}
+                           for i, x in enumerate(raices())],
                 "lightburn": buscar_lightburn() or "",
                 "clientes": db.clientes(),
             })
@@ -1617,7 +1776,11 @@ class Handler(BaseHTTPRequestHandler):
                 # "auto" = con el programa que corresponde a ese tipo de archivo
                 if modo == "auto":
                     modo = programa_para(p)[0]
-                if modo and modo != "sistema":
+                # Cualquier otra cosa (abrir, sistema, o algo que no conocemos)
+                # significa "que lo abra Windows con lo que tenga". Antes esto
+                # caía en el aviso de "no encuentro tal programa", que es lo que
+                # pasaba al tocar "Ver imagen" o "Ver manual".
+                if modo in PROGRAMAS_DEF:
                     exe = buscar_programa(modo)
                     if exe:
                         subprocess.Popen([exe, p])
@@ -1939,6 +2102,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "orden no valido"})
             db.ordenar_cats([str(n) for n in nombres])
             return self._send(200, {"ok": True})
+
+        if r == "/api/carpeta/agregar":
+            res = agregar_carpeta(self._json().get("carpeta"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/carpeta/quitar":
+            res = quitar_carpeta(self._json().get("carpeta"))
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/carpeta/marcar":
             d = self._json()

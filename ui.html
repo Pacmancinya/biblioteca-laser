@@ -235,6 +235,19 @@
   .opc-prog .ico{font-size:17px;flex:none}
   .recordar{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tx2);margin-top:11px;cursor:pointer}
   /* gestor de categorías */
+  /* menu de secciones de Ajustes: para no tener que scrolear */
+  .ajmenu{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+  .ajb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:10px;
+       padding:10px 15px;cursor:pointer;font-family:var(--fd);font-size:13.5px}
+  .ajb:hover{border-color:var(--amb);color:var(--tx)}
+  .ajb.on{background:var(--amb);border-color:var(--amb);color:#14120F}
+  .ajsec{display:none}
+  .ajsec.on{display:block}
+  /* ocultar la barra lateral para ver mas modelos */
+  .lado.escondido{display:none}
+  .btnlado{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:9px;
+           padding:7px 11px;cursor:pointer;font-size:15px;line-height:1;flex:none}
+  .btnlado:hover{border-color:var(--amb);color:var(--amb2)}
   .catg{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--panel2)}
   .catg-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
   .catg-h b{font-family:var(--fd);font-size:1rem;color:var(--amb2)}
@@ -331,6 +344,7 @@
     <button class="x" id="qx">&times;</button>
   </div>
   <div class="cuenta" id="cuenta"></div>
+  <button class="btnlado" id="btnLado" title="Esconder o mostrar la columna de filtros">◧</button>
   <button class="btn mini" id="btnTema" title="Cambiar entre claro y oscuro" style="flex:none">🌙</button>
 </div>
 
@@ -399,9 +413,17 @@
     <!-- AJUSTES -->
     <div class="vista" id="v-ajustes">
       <h2 class="tit">Ajustes</h2>
-      <p class="sub">Versión, respaldos y carpeta de modelos.</p>
+      <p class="sub">Elige de qué quieres ocuparte.</p>
+      <div class="ajmenu" id="ajMenu">
+        <button class="ajb on" data-aj="carpetas">📁 Carpetas de modelos</button>
+        <button class="ajb" data-aj="categorias">🗂 Categorías</button>
+        <button class="ajb" data-aj="programas">🖥 Programas</button>
+        <button class="ajb" data-aj="costos">💲 Costos</button>
+        <button class="ajb" data-aj="respaldo">💾 Respaldo</button>
+        <button class="ajb" data-aj="version">🔄 Versión</button>
+      </div>
 
-      <div class="caja">
+      <div class="caja ajsec" data-sec="version">
         <h4>Versión de la app</h4>
         <p class="sub" id="verTxt">—</p>
         <div class="barra">
@@ -410,7 +432,7 @@
         <div id="actCont"></div>
       </div>
 
-      <div class="caja">
+      <div class="caja ajsec" data-sec="categorias">
         <h4>Categorías y subcategorías</h4>
         <p class="sub">Crea, renombra, ordena (▲▼) o saca categorías y subcategorías.
         Los modelos se mueven solos; en el disco no se toca nada.</p>
@@ -419,21 +441,21 @@
         <div id="reglasCont"></div>
       </div>
 
-      <div class="caja">
+      <div class="caja ajsec" data-sec="programas">
         <h4>Programas para abrir los archivos</h4>
         <p class="sub">Con qué programa se abre cada tipo de archivo. La app los busca sola;
         si no los encuentra, puedes indicarle dónde están.</p>
         <div id="progsCont"></div>
       </div>
 
-      <div class="caja">
+      <div class="caja ajsec" data-sec="costos">
         <h4>💲 Costos para cotizar</h4>
         <p class="sub">De aquí sale el precio que te sugiere la app en cada modelo.
         Actualízalo cuando te suban los costos.</p>
         <div id="costosCont"></div>
       </div>
 
-      <div class="caja">
+      <div class="caja ajsec" data-sec="respaldo">
         <h4>Respaldo de tus datos</h4>
         <p class="sub">Guarda tus favoritos, nombres y categorías corregidas, precios, clientes y ventas.
         Sirve para pasarlos a otro computador o para no perderlos.</p>
@@ -445,13 +467,17 @@
         <p class="sub" style="margin:0">Al cargar un respaldo se agrega lo que falte, sin borrar lo que ya tienes.</p>
       </div>
 
-      <div class="caja">
-        <h4>Carpeta de modelos</h4>
+      <div class="caja ajsec" data-sec="carpetas">
+        <h4>Carpetas de modelos</h4>
         <p class="sub" id="rutaTxt">—</p>
+        <div id="carpetasCont" style="margin:10px 0 14px"></div>
         <div class="barra">
-          <button class="btn" id="btnReindexar">🔄 Releer la carpeta y reordenar</button>
-          <button class="btn pri" id="btnCambiarCarpeta">📁 Elegir otra carpeta</button>
+          <button class="btn pri" id="btnAgregarCarpeta">➕ Agregar otra carpeta</button>
+          <button class="btn" id="btnReindexar">🔄 Releer todo y reordenar</button>
+          <button class="btn" id="btnCambiarCarpeta">📁 Cambiar la carpeta principal</button>
         </div>
+        <p class="sub" style="margin:6px 0 0">Puedes tener tus modelos en varias carpetas
+        (por ejemplo un disco externo). Se juntan todas en la misma biblioteca.</p>
         <p class="sub" style="margin:6px 0 0">Úsalo cuando agregues modelos nuevos, o si las
         categorías te quedaron mal ordenadas. Vuelve a leer la carpeta y reparte todo de nuevo.
         Tus favoritos, precios, nombres y categorías corregidas NO se pierden.</p>
@@ -1351,8 +1377,76 @@ function verAjustes(){
   });
   document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
     +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
-  verCostos(); verProgramas(); verCategorias();
+  verCostos(); verProgramas(); verCategorias(); verCarpetas();
+  var guardada='carpetas';
+  try{ guardada=localStorage.getItem('ajustes_seccion')||'carpetas'; }catch(e){}
+  verSeccionAjustes(guardada);
 }
+
+// -------- esconder la columna de filtros --------
+// Se guarda la eleccion, para que quede como el usuario la dejo.
+function aplicarLado(esconder){
+  var l=document.getElementById('lado'), b=document.getElementById('btnLado');
+  if(!l) return;
+  l.classList.toggle('escondido', !!esconder);
+  if(b){ b.textContent = esconder ? '▶' : '◧';
+         b.title = esconder ? 'Mostrar la columna de filtros' : 'Esconder la columna de filtros'; }
+  try{ localStorage.setItem('lado', esconder?'1':'0'); }catch(e){}
+}
+document.getElementById('btnLado').onclick=function(){
+  aplicarLado(!document.getElementById('lado').classList.contains('escondido'));
+};
+try{ if(localStorage.getItem('lado')==='1') aplicarLado(true); }catch(e){}
+
+// -------- secciones de Ajustes --------
+function verSeccionAjustes(cual){
+  [].forEach.call(document.querySelectorAll('#ajMenu .ajb'), function(b){
+    b.classList.toggle('on', b.dataset.aj===cual); });
+  [].forEach.call(document.querySelectorAll('#v-ajustes .ajsec'), function(s){
+    s.classList.toggle('on', s.dataset.sec===cual); });
+  try{ localStorage.setItem('ajustes_seccion', cual); }catch(e){}
+}
+document.getElementById('ajMenu').addEventListener('click',function(e){
+  var b=e.target.closest('.ajb'); if(b) verSeccionAjustes(b.dataset.aj);
+});
+
+// -------- las carpetas de modelos --------
+function verCarpetas(){
+  var c=document.getElementById('carpetasCont'); if(!c) return;
+  var rs=(D&&D.raices)||[];
+  if(!rs.length){ c.innerHTML='<p class="sub" style="margin:0">Todavía no hay carpetas.</p>'; return; }
+  c.innerHTML=rs.map(function(x){
+    return '<div class="arch"><span class="ax">📁</span>'
+      +'<span class="an" style="white-space:normal"><b>'+esc(x.ruta)+'</b>'
+      +(x.principal?' <span class="mia">principal</span>':'')
+      +'<br><small style="color:var(--tx3)">'+x.modelos.toLocaleString('es-CL')+' modelos</small></span>'
+      +(x.principal?'':'<button class="bx" data-quitarcarpeta="'+esc(x.ruta)+'" title="Sacar esta carpeta">✕</button>')
+      +'</div>';
+  }).join('');
+}
+document.getElementById('btnAgregarCarpeta').onclick=function(){
+  var r=prompt('Escribe o pega la ruta de la carpeta que quieres agregar.\n\n'
+    +'Déjalo en blanco para buscarla con una ventana.','');
+  if(r===null) return;
+  toast('Leyendo la carpeta, espera...');
+  api('/api/carpeta/agregar',{carpeta:r.trim()}).then(function(res){
+    if(res.ok){ toast('Listo · '+res.total.toLocaleString('es-CL')+' modelos en '+res.carpetas+' carpetas');
+                cargar().then(function(){ verAjustes(); aplicar(); }); }
+    else toast(res.error||'No se pudo', true);
+  });
+};
+
+document.getElementById('carpetasCont').addEventListener('click',function(e){
+  var q=e.target.closest('[data-quitarcarpeta]'); if(!q) return;
+  if(!confirm('¿Sacar esta carpeta de la biblioteca?\n\n'+q.dataset.quitarcarpeta
+    +'\n\nNo se borra ningún archivo: solo dejan de aparecer sus modelos.')) return;
+  toast('Sacando la carpeta...');
+  api('/api/carpeta/quitar',{carpeta:q.dataset.quitarcarpeta}).then(function(r){
+    if(r.ok){ toast('Listo · '+r.total.toLocaleString('es-CL')+' modelos');
+              cargar().then(function(){ verAjustes(); aplicar(); }); }
+    else toast(r.error||'No se pudo', true);
+  });
+});
 
 // -------- gestor de categorías y subcategorías --------
 function verCategorias(){

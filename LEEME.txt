@@ -37,6 +37,15 @@ Boton  ☀️ / 🌙  arriba a la derecha. Queda guardado para
 la proxima vez que abras.
 
 
+ESCONDER LA COLUMNA DE FILTROS
+------------------------------
+Boton  ◧  arriba a la derecha, al lado del sol/luna.
+
+Esconde la columna de la izquierda para que los modelos se vean
+mas grandes y quepan mas. Se aprieta de nuevo (▶) y vuelve.
+Queda guardado como lo dejes.
+
+
 QUITAR UN MODELO vs ELIMINARLO
 ------------------------------
 En la ficha de un modelo, abajo, hay dos botones distintos:
@@ -52,12 +61,33 @@ En la ficha de un modelo, abajo, hay dos botones distintos:
      Para recuperarlo: Limpieza -> "Ver papelera".
 
 
-CAMBIAR LA CARPETA DE MODELOS
------------------------------
-Boton del engranaje (arriba a la derecha) -> "Cambiar carpeta".
-Se abre una ventana para elegir la carpeta nueva y vuelve a
-leer los modelos. Tus favoritos, precios, clientes y ventas
-NO se pierden.
+LAS CARPETAS DE MODELOS
+-----------------------
+Engranaje -> "Carpetas de modelos".
+
+Puedes tener tus modelos en VARIAS carpetas (por ejemplo en un
+disco externo, o una carpeta nueva que te pasaron). Se juntan
+todas en la misma biblioteca.
+
+  + Agregar otra carpeta   -> suma una carpeta mas
+  ✕                        -> saca esa carpeta (NO borra archivos,
+                              solo dejan de aparecer sus modelos)
+  Cambiar la principal     -> cambia la carpeta de siempre
+
+Tus favoritos, precios, clientes y ventas NO se pierden al
+agregar o sacar carpetas.
+
+
+LOS AJUSTES (el engranaje)
+--------------------------
+Arriba hay botones para ir directo a lo que buscas, sin tener
+que bajar por toda la pagina:
+
+  📁 Carpetas de modelos     🗂 Categorias
+  🖥 Programas               💲 Costos
+  💾 Respaldo                🔄 Version
+
+Se abre en la ultima que usaste.
 
 
 LAS SECCIONES (arriba)

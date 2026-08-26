@@ -93,17 +93,49 @@ def limpiar_nombre(nombre):
     return n
 
 
+def todas_las_carpetas():
+    """Las carpetas de modelos: la principal y las que el usuario agrego.
+
+    La principal conserva su lugar de siempre en config.json ("biblioteca"),
+    asi lo que el usuario ya tenia guardado (favoritos, precios) sigue
+    calzando. Las extra van en "bibliotecas_extra".
+    """
+    cfg = {}
+    if os.path.exists(CONFIG):
+        try:
+            with open(CONFIG, encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            pass
+    carpetas = []
+    principal = cfg.get("biblioteca")
+    if principal and os.path.isdir(principal):
+        carpetas.append(principal)
+    for extra in (cfg.get("bibliotecas_extra") or []):
+        if extra and os.path.isdir(extra) and extra not in carpetas:
+            carpetas.append(extra)
+    return carpetas
+
+
 def indexar():
     global RAIZ
     RAIZ = obtener_raiz()
+    carpetas = todas_las_carpetas() or [RAIZ]
+    RAIZ = carpetas[0]
     print("Biblioteca:", RAIZ)
+    for extra in carpetas[1:]:
+        print("  y tambien:", extra)
     print("Indexando, espera un momento...")
 
     t0 = time.time()
     modelos = []
     total_carpetas = 0
 
-    for dirpath, dirnames, filenames in os.walk(RAIZ):
+    for i_carpeta, carpeta_base in enumerate(carpetas):
+      # las carpetas agregadas llevan una marca en su ruta relativa, para que
+      # dos modelos que se llamen igual en carpetas distintas no se pisen
+      marca = "" if i_carpeta == 0 else ("[%s]" % os.path.basename(carpeta_base.rstrip(os.sep + "/")) )
+      for dirpath, dirnames, filenames in os.walk(carpeta_base):
         total_carpetas += 1
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
 
@@ -143,9 +175,13 @@ def indexar():
         if not archivos["corte"]:
             continue  # no es un modelo
 
-        rel = os.path.relpath(dirpath, RAIZ)
+        rel = os.path.relpath(dirpath, carpeta_base)
         partes = rel.split(os.sep)
-        nombre = partes[-1] if rel != "." else "Raíz"
+        nombre = partes[-1] if rel != "." else os.path.basename(carpeta_base.rstrip(os.sep + "/"))
+        if marca:
+            # la carpeta principal no lleva marca: asi los favoritos y precios
+            # que el usuario ya tenia guardados siguen calzando igual
+            rel = os.path.join(marca, rel) if rel != "." else marca
 
         # preview: prefiere imagen con nombre parecido al de la carpeta, si no la primera
         preview = ""
@@ -173,6 +209,7 @@ def indexar():
             "categoria": cat,
             "subcategoria": sub,
             "carpeta_origen": partes[0] if rel != "." else "",
+            "raiz": carpeta_base,
             "ruta_partes": partes,
             "archivos": archivos,
             "n_corte": len(archivos["corte"]),
@@ -207,6 +244,7 @@ def indexar():
 
     data = {
         "raiz": RAIZ,
+        "raices": carpetas,
         "heredados": heredados,
         "generado": int(time.time()),
         # con qué versión del clasificador se ordenó esto: si la app trae una
@@ -221,6 +259,8 @@ def indexar():
         json.dump(data, f, ensure_ascii=False)
 
     seg = round(time.time() - t0, 1)
+    if len(carpetas) > 1:
+        print("Carpetas de modelos :", len(carpetas))
     print("Carpetas recorridas :", total_carpetas)
     print("MODELOS indexados   :", len(modelos))
     print("Con imagen          :", sum(1 for m in modelos if m["tiene_imagen"]))
