@@ -39,10 +39,16 @@ la proxima vez que abras.
 
 ESCONDER LA COLUMNA DE FILTROS
 ------------------------------
-Boton  ◧  arriba a la derecha, al lado del sol/luna.
+Toca el LOGO de arriba a la izquierda (donde dice
+"Biblioteca Laser").
 
-Esconde la columna de la izquierda para que los modelos se vean
-mas grandes y quepan mas. Se aprieta de nuevo (▶) y vuelve.
+La columna de la izquierda se esconde y los modelos se ven
+mas grandes: caben 8 por fila en vez de 5.
+Tocas el logo otra vez y vuelve.
+
+Cuando esta escondida, abajo del nombre dice
+"mostrar filtros", para que no se te olvide.
+
 Queda guardado como lo dejes.
 
 

@@ -1,6 +1,6 @@
 {
   "version": "2.1",
   "nombre": "Mas comodo",
-  "novedades": "Arreglado: al tocar Ver imagen o Ver manual salia un aviso raro de Ajustes-Programas en vez de abrir el archivo. Tambien se mejoro la busqueda de CorelDRAW y LightBurn: ahora los busca donde Windows los tiene anotados, asi los encuentra aunque esten en otra carpeta. Nuevo: puedes tener los modelos en VARIAS carpetas a la vez (Ajustes > Carpetas de modelos). Nuevo: el boton para esconder la columna de filtros y ver los modelos mas grandes. Y los Ajustes ahora tienen botones arriba para ir directo a lo que buscas, sin bajar por toda la pagina.",
+  "novedades": "Arreglado: al tocar Ver imagen o Ver manual salia un aviso raro de Ajustes-Programas en vez de abrir el archivo. Tambien se mejoro la busqueda de CorelDRAW y LightBurn: ahora los busca donde Windows los tiene anotados, asi los encuentra aunque esten en otra carpeta. Nuevo: puedes tener los modelos en VARIAS carpetas a la vez (Ajustes > Carpetas de modelos). Nuevo: tocando el logo de arriba a la izquierda se esconde o se muestra la columna de filtros, para ver los modelos mas grandes. Y los Ajustes ahora tienen botones arriba para ir directo a lo que buscas, sin bajar por toda la pagina.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

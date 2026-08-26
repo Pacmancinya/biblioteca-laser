@@ -50,7 +50,12 @@
 
   /* ---------- topbar ---------- */
   .top{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
-  .logo{display:flex;align-items:center;gap:10px;flex:none}
+  .logo{display:flex;align-items:center;gap:10px;flex:none;cursor:pointer;
+        border-radius:11px;padding:4px 8px;margin-left:-8px;user-select:none}
+  .logo:hover{background:var(--panel2)}
+  .logo:hover .ic{box-shadow:0 0 0 3px var(--amb-dim)}
+  .logo:active .ic{transform:scale(.94)}
+  .logo .ic{transition:transform .12s, box-shadow .12s}
   .logo .ic{width:34px;height:34px;border-radius:9px;background:linear-gradient(140deg,var(--amb),#B87418);display:grid;place-items:center}
   .logo .ic svg{width:19px;height:19px;fill:#14120F}
   .logo .t{font-family:var(--fd);font-size:1.1rem}
@@ -245,9 +250,6 @@
   .ajsec.on{display:block}
   /* ocultar la barra lateral para ver mas modelos */
   .lado.escondido{display:none}
-  .btnlado{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:9px;
-           padding:7px 11px;cursor:pointer;font-size:15px;line-height:1;flex:none}
-  .btnlado:hover{border-color:var(--amb);color:var(--amb2)}
   .catg{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--panel2)}
   .catg-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
   .catg-h b{font-family:var(--fd);font-size:1rem;color:var(--amb2)}
@@ -325,9 +327,10 @@
 <body>
 
 <div class="top">
-  <div class="logo">
+  <div class="logo" id="logo" role="button" tabindex="0"
+       title="Mostrar u ocultar la columna de filtros">
     <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/><path d="M18 15l.8 2.4L21 18l-2.2.7L18 21l-.8-2.3L15 18l2.2-.6z"/></svg></div>
-    <div class="t">Biblioteca Láser<small>modelos & taller</small></div>
+    <div class="t">Biblioteca Láser<small id="logoSub">modelos &amp; taller</small></div>
   </div>
   <div class="tabs" id="tabs">
     <button class="tab on" data-v="biblio">Biblioteca</button>
@@ -344,7 +347,6 @@
     <button class="x" id="qx">&times;</button>
   </div>
   <div class="cuenta" id="cuenta"></div>
-  <button class="btnlado" id="btnLado" title="Esconder o mostrar la columna de filtros">◧</button>
   <button class="btn mini" id="btnTema" title="Cambiar entre claro y oscuro" style="flex:none">🌙</button>
 </div>
 
@@ -1386,15 +1388,21 @@ function verAjustes(){
 // -------- esconder la columna de filtros --------
 // Se guarda la eleccion, para que quede como el usuario la dejo.
 function aplicarLado(esconder){
-  var l=document.getElementById('lado'), b=document.getElementById('btnLado');
+  var l=document.getElementById('lado'), lg=document.getElementById('logo');
+  var sub=document.getElementById('logoSub');
   if(!l) return;
   l.classList.toggle('escondido', !!esconder);
-  if(b){ b.textContent = esconder ? '▶' : '◧';
-         b.title = esconder ? 'Mostrar la columna de filtros' : 'Esconder la columna de filtros'; }
+  if(lg) lg.title = esconder ? 'Mostrar los filtros' : 'Ocultar los filtros';
+  // el subtitulo del logo cuenta que pasa al tocarlo
+  if(sub) sub.innerHTML = esconder ? '▸ mostrar filtros' : 'modelos &amp; taller';
   try{ localStorage.setItem('lado', esconder?'1':'0'); }catch(e){}
 }
-document.getElementById('btnLado').onclick=function(){
+function alternarLado(){
   aplicarLado(!document.getElementById('lado').classList.contains('escondido'));
+}
+document.getElementById('logo').onclick=alternarLado;
+document.getElementById('logo').onkeydown=function(e){
+  if(e.key==='Enter'||e.key===' '){ e.preventDefault(); alternarLado(); }
 };
 try{ if(localStorage.getItem('lado')==='1') aplicarLado(true); }catch(e){}
 
