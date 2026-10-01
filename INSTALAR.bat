@@ -76,11 +76,11 @@ set "PYW=.venv\Scripts\pythonw.exe"
 REM ------------------------------------------------ 2) las librerias
 echo  [3/4] Instalando lo que necesita (solo la primera vez)...
 "%PY%" -m pip install --upgrade pip >nul 2>&1
-"%PY%" -m pip install --quiet pillow pywebview
+"%PY%" -m pip install --quiet pillow "pywebview>=5"
 if errorlevel 1 (
     echo.
     echo   AVISO: algo no se pudo instalar. Reviso...
-    "%PY%" -m pip install pillow pywebview
+    "%PY%" -m pip install pillow "pywebview>=5"
 )
 
 REM comprobar que quedo listo para abrir en ventana propia

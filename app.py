@@ -11,7 +11,7 @@ Servidor en 127.0.0.1 que sirve la biblioteca en el navegador y permite:
 """
 import os, sys, json, re, threading, webbrowser, subprocess, urllib.parse, mimetypes, hashlib, shutil, time
 import base64, io          # miniaturas de LightBurn
-import sqlite3, uuid
+import sqlite3, uuid, tempfile
 from datetime import datetime
 from functools import wraps
 from contextlib import closing
@@ -19,6 +19,8 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
 import formatos
+import indexar
+import agregados
 
 CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
 
@@ -323,8 +325,8 @@ def modelo_vista(m, metas=None):
         r = regla_de(m["rel"])
         if r:
             cat = r[0]
-            if sub is None and r[1]:
-                sub = r[1]
+            if sub is None:
+                sub = r[1] or ""
 
     return {
         "rel": m["rel"], "id": m["id"],
@@ -356,6 +358,8 @@ def categorias_con_conteo(vistas):
     creadas, ocultas = db.subcats_propias()
     conteo, conteo_sub = {}, {}
     for v in vistas:
+        if v.get("oculto"):
+            continue
         conteo[v["c"]] = conteo.get(v["c"], 0) + 1
         conteo_sub[(v["c"], v["s"])] = conteo_sub.get((v["c"], v["s"]), 0) + 1
 
@@ -415,7 +419,9 @@ def categorias_con_conteo(vistas):
             return (1, base[n])
         return (2, n.lower())
     salida.sort(key=clave)
+    orden_sub = {(r["categoria"], r["subcategoria"]): r["orden"] for r in db.filas("SELECT * FROM subcats")}
     for g in salida:
+        g["subs"].sort(key=lambda sub: orden_sub.get((g["nombre"], sub["nombre"]), 999))
         g["propia"] = g["nombre"] in propias_cat
     return salida
 
@@ -591,6 +597,8 @@ def hacer_principal(rel, nombre):
     m = POR_REL.get(rel)
     if not m:
         return {"error": "no existe ese modelo"}
+    recargar_parcial(rel)
+    m = POR_REL[rel]
     origen = os.path.join(m["ruta"], nombre)
     if not ruta_segura(origen) or not os.path.exists(origen):
         return {"error": "no encuentro ese archivo"}
@@ -627,12 +635,10 @@ def hacer_principal(rel, nombre):
 
 
 def guardar_indice():
-    """Graba biblioteca.json despues de un cambio hecho desde la app."""
-    try:
-        with open(INDICE, "w", encoding="utf-8") as f:
-            json.dump(DATOS, f, ensure_ascii=False)
-    except Exception:
-        pass
+    """Persistencia atómica: nunca silenciar un error de escritura."""
+    DATOS["modelos"] = MODELOS
+    DATOS["total_modelos"] = len(MODELOS)
+    indexar.guardar_json_atomico(INDICE, DATOS)
 
 
 def _la_pone_el_programa(cat, sub):
@@ -695,6 +701,47 @@ def ordenar_categorias(nombres):
     return {"ok": True}
 
 
+@cambio_organizacion("Antes de asignar modelos arrastrando")
+def asignar_modelos(rels, categoria, subcategoria=""):
+    if not isinstance(rels, list) or not rels or any(not isinstance(r, str) or r not in POR_REL for r in rels):
+        return {"error": "Selecciona modelos válidos."}
+    grupos = categorias_con_conteo(vistas_todas())
+    grupo = next((g for g in grupos if g["nombre"] == categoria), None)
+    if not grupo or (subcategoria and subcategoria not in [s["nombre"] for s in grupo["subs"]]):
+        return {"error": "Elige una categoría o subcategoría existente."}
+    for rel in set(rels):
+        db.guardar_meta(rel, {"categoria": categoria, "subcategoria": subcategoria})
+    return {"ok": True, "aviso": "Listo. Si no te gusta, Respaldo -> Volver a como estaba."}
+
+
+@cambio_organizacion("Antes de ordenar las subcategorías")
+def ordenar_subcategorias(categoria, nombres):
+    g = next((g for g in categorias_con_conteo(vistas_todas()) if g["nombre"] == categoria), None)
+    if not g or not isinstance(nombres, list) or any(not isinstance(n, str) for n in nombres) or set(nombres) != {s["nombre"] for s in g["subs"]} or len(nombres) != len(set(nombres)):
+        return {"error": "Orden no válido."}
+    db.ordenar_subcats(categoria, nombres)
+    return {"ok": True}
+
+
+@cambio_organizacion("Antes de trasladar una subcategoría")
+def trasladar_subcategoria(categoria, subcategoria, destino):
+    grupos = categorias_con_conteo(vistas_todas())
+    origen = next((g for g in grupos if g["nombre"] == categoria), None)
+    if not origen or subcategoria not in [s["nombre"] for s in origen["subs"]] or destino not in [g["nombre"] for g in grupos]:
+        return {"error": "Elige categorías existentes."}
+    if categoria == destino:
+        return {"ok": True}
+    for v in modelos_en(categoria, subcategoria):
+        db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": subcategoria})
+    for regla in db.reglas_carpeta():
+        if regla["categoria"] == categoria and regla["subcategoria"] == subcategoria:
+            db.guardar_regla(regla["rel"], destino, subcategoria)
+    db.ocultar_subcat(categoria, subcategoria)
+    db.crear_subcat(destino, subcategoria)
+    recargar_reglas()
+    return {"ok": True}
+
+
 @cambio_organizacion(lambda cat, nombre: "Antes de crear la subcategoría " + str(nombre))
 def crear_subcategoria(cat, nombre):
     db.crear_subcat(cat, nombre)
@@ -727,6 +774,29 @@ def guardar_edicion(rel, campos):
 def archivo_para_programa(m, programa, principal=""):
     archivos = [a for grupo in m["archivos"].values() for a in grupo]
     return formatos.elegir_archivo(m["ruta"], archivos, programa, principal)
+
+
+@db.exclusivo
+def finalizar_agregado(destinos, categoria, subcategoria):
+    nuevos = []
+    for destino in destinos:
+        nuevos.extend(releer_arbol(destino))
+        if categoria:
+            rel = os.path.relpath(destino, RAIZ)
+            db.guardar_regla(rel, categoria, subcategoria)
+    recargar_reglas()
+    return nuevos
+
+
+@db.exclusivo
+def preparar_arrastre(rutas, categoria="", subcategoria=""):
+    if categoria:
+        grupo = next((g for g in categorias_con_conteo(vistas_todas()) if g["nombre"] == categoria), None)
+        if not grupo or (subcategoria and subcategoria not in [s["nombre"] for s in grupo["subs"]]):
+            return {"error": "Ese destino ya no existe. Arrastra de nuevo."}
+    raiz = RAIZ or cargar_config().get("biblioteca", "")
+    return agregados.preparar(rutas, raiz, categoria, subcategoria, finalizar_agregado,
+                             lambda: respaldar_base("Antes de agregar modelos a una categoría"))
 
 
 def vista_previa_lightburn(m):
@@ -837,6 +907,7 @@ def ruta_respaldo(carpeta, nombre):
     return p
 
 
+@db.exclusivo
 def guardar_archivo(rel, tipo, nombre, datos):
     """Guarda un archivo en la carpeta del modelo. Si reemplaza a otro,
     respalda el anterior en _versiones_anteriores (máximo 3)."""
@@ -849,85 +920,63 @@ def guardar_archivo(rel, tipo, nombre, datos):
     if not ruta_segura(carpeta):
         return {"error": "ruta no permitida"}
     nombre = os.path.basename(nombre).replace("\\", "").replace("/", "")
-    if not nombre:
+    if not nombre or nombre in (".", ".."):
         return {"error": "nombre inválido"}
+    if os.path.splitext(nombre)[1].lower() in agregados.PROHIBIDAS:
+        return {"error": "No se agregan ejecutables ni accesos directos."}
     destino = os.path.join(carpeta, nombre)
 
-    if os.path.exists(destino):
-        respaldo = ruta_respaldo(carpeta, nombre)
-        try:
-            shutil.move(destino, respaldo)
+    temporal = ""
+    try:
+        if os.path.exists(destino):
+            if not os.path.isfile(destino) or os.path.islink(destino):
+                return {"error": "Ese nombre corresponde a una carpeta o enlace. Elige otro nombre."}
+            respaldo = ruta_respaldo(carpeta, nombre)
+            shutil.copy2(destino, respaldo)
             db.registrar_version(rel, tipo, nombre, respaldo)
-        except OSError as e:
-            return {"error": f"no se pudo respaldar: {e}"}
-
-    with open(destino, "wb") as f:
-        f.write(datos)
+        fd, temporal = tempfile.mkstemp(prefix=".carga-", dir=carpeta)
+        with os.fdopen(fd, "wb") as f:
+            f.write(datos)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporal, destino)
+    except OSError as e:
+        return {"error": "No pude guardar el archivo. La versión anterior se conserva: %s" % e}
+    finally:
+        if temporal and os.path.exists(temporal):
+            os.remove(temporal)
+    try:
+        recargar_parcial(rel)
+    except OSError as e:
+        return {"error": "El archivo se guardó, pero no pude guardar el índice de la biblioteca: %s" % e}
     return {"ok": True, "archivo": nombre}
 
 
 # ---------------------------------------------------------------- papelera
 PAPELERA = os.path.join(BASE, "_papelera")
 
-def _destino_papelera(nombre):
-    os.makedirs(PAPELERA, exist_ok=True)
-    base, ext = os.path.splitext(nombre)
-    marca = time.strftime("%Y%m%d-%H%M%S")
-    p = os.path.join(PAPELERA, f"{base}__{marca}{ext}")
-    n = 2
-    while os.path.exists(p):
-        p = os.path.join(PAPELERA, f"{base}__{marca}-{n}{ext}")
-        n += 1
-    return p
+MENSAJE_OCULTO = ("Listo, ya no se muestra. Tus archivos siguen en su carpeta. "
+                  "Para que vuelva: Limpieza -> Ver ocultos.")
 
 
 def borrar_archivo(rel, nombre):
-    """Manda UN archivo a la papelera (no lo borra de verdad)."""
-    m = POR_REL.get(rel)
-    if not m:
-        return {"error": "modelo no encontrado"}
-    origen = os.path.join(m["ruta"], os.path.basename(nombre))
-    if es_convertidos(origen):
-        return {"error": "Los trabajos de _convertidos se conservan. No se quitaron archivos."}
-    if not ruta_segura(origen) or not os.path.isfile(origen):
-        return {"error": "archivo no encontrado"}
-    destino = _destino_papelera(os.path.basename(nombre))
-    try:
-        shutil.move(origen, destino)
-    except OSError as e:
-        return {"error": f"no se pudo mover: {e}"}
-    db.a_papelera("archivo", rel, os.path.basename(nombre), origen, destino)
-    recargar_parcial(rel)
-    return {"ok": True}
+    """Compatibilidad con clientes antiguos: ya no se quitan archivos del disco."""
+    return {"error": "Los archivos se conservan. Puedes quitar el modelo de la biblioteca."}
 
 
 @cambio_organizacion(lambda rel: "Antes de quitar el modelo " + str(rel))
 def borrar_modelo(rel):
-    """Manda la CARPETA completa del modelo a la papelera."""
+    """El basurero solo oculta, incluso si lo llama una interfaz anterior."""
     m = POR_REL.get(rel)
     if not m:
         return {"error": "modelo no encontrado"}
-    origen = m["ruta"]
-    if es_convertidos(origen):
-        return {"error": "La carpeta _convertidos se conserva. No se quitó el modelo."}
-    if not ruta_segura(origen) or not os.path.isdir(origen):
-        return {"error": "carpeta no encontrada"}
-    if os.path.abspath(origen) == os.path.abspath(RAIZ):
-        return {"error": "no se puede borrar la carpeta principal"}
-    destino = _destino_papelera(os.path.basename(origen))
-    try:
-        shutil.move(origen, destino)
-    except OSError as e:
-        return {"error": f"no se pudo mover: {e}"}
-    db.a_papelera("modelo", rel, m["nombre"], origen, destino)
-    # sacar del índice en memoria
-    MODELOS[:] = [x for x in MODELOS if x["rel"] != rel and not x["rel"].startswith(rel + os.sep)]
-    POR_REL.pop(rel, None)
-    for k in [k for k in POR_REL if k.startswith(rel + os.sep)]:
-        POR_REL.pop(k, None)
-    return {"ok": True}
+    if es_convertidos(m["ruta"]):
+        return {"error": "Los trabajos de _convertidos se conservan."}
+    db.guardar_meta(rel, {"oculto": 1})
+    return {"ok": True, "oculto": 1, "aviso": MENSAJE_OCULTO}
 
 
+@db.exclusivo
 def restaurar_papelera(pid):
     it = db.item_papelera(pid)
     if not it:
@@ -945,24 +994,15 @@ def restaurar_papelera(pid):
         return {"error": f"no se pudo restaurar: {e}"}
     db.quitar_de_papelera(pid)
     if it["tipo"] == "archivo":
-        recargar_parcial(it["rel"])
+        _releer_carpeta(os.path.dirname(it["origen"]))
+        guardar_indice()
+    else:
+        releer_arbol(it["origen"])
     return {"ok": True, "tipo": it["tipo"]}
 
 
 def vaciar_papelera():
-    n = 0
-    for it in db.papelera():
-        if es_convertidos(it["destino"]):
-            continue
-        try:
-            if os.path.isdir(it["destino"]):
-                shutil.rmtree(it["destino"]); n += 1
-            elif os.path.isfile(it["destino"]):
-                os.remove(it["destino"]); n += 1
-        except OSError:
-            pass
-        db.quitar_de_papelera(it["id"])
-    return {"ok": True, "borrados": n}
+    return {"error": "La papelera se conserva solo para recuperar archivos."}
 
 
 # ---------------------------------------------------------------- duplicados
@@ -977,8 +1017,10 @@ def buscar_duplicados():
     cache = db.huellas_todas()
     nuevas = []
     firmas = {}
+    metas = db.meta_todos()
+    visibles = [m for m in MODELOS if not (metas.get(m["rel"]) or {}).get("oculto")]
 
-    for m in MODELOS:
+    for m in visibles:
         a = m.get("archivos") or {}
         candidatos = (a.get("corte") or [])[:25]
         if not candidatos:
@@ -1017,7 +1059,7 @@ def buscar_duplicados():
         por_firma.setdefault("A:" + hashlib.md5("|".join(sorted(conj)).encode()).hexdigest(),
                              set()).add(rel)
 
-    for m in MODELOS:
+    for m in visibles:
         if not m.get("preview"):
             continue
         p = os.path.join(m["ruta"], m["preview"])
@@ -1659,6 +1701,8 @@ def importar_datos(datos, modo="fusionar"):
             db.guardar_ajuste(k, v)
         for s in datos.get("subcats", []):
             db.ocultar_subcat(s.get("categoria"), s.get("subcategoria"), s.get("oculta"))
+            db.ejecutar("UPDATE subcats SET orden=? WHERE categoria=? AND subcategoria=?",
+                        (s.get("orden", 999), s.get("categoria"), s.get("subcategoria")))
         for cat in datos.get("cats", []):
             if modo == "fusionar" and db.fila("SELECT nombre FROM cats WHERE nombre=?", (cat["nombre"],)):
                 continue
@@ -1749,9 +1793,10 @@ def aplicar_actualizacion(url_zip):
             "aviso": "Cierra y vuelve a abrir la biblioteca para usar la versión nueva."}
 
 
+@db.exclusivo
 def restaurar_version(rel, vid):
     v = db.fila("SELECT * FROM versiones WHERE id=?", (vid,))
-    if not v or not os.path.exists(v["respaldo"]):
+    if not v or v["rel"] != rel or not os.path.isfile(v["respaldo"]):
         return {"error": "esa versión ya no está"}
     m = POR_REL.get(rel)
     if not m:
@@ -1759,20 +1804,10 @@ def restaurar_version(rel, vid):
     actual = os.path.join(m["ruta"], v["archivo"])
     if es_convertidos(actual) or es_convertidos(v["respaldo"]):
         return {"error": "Los trabajos de _convertidos se conservan tal como están."}
-    # leemos la versión a restaurar ANTES de mover nada (evita pisarla)
+    # Leemos antes de crear otro respaldo: la retención puede retirar esta versión.
     with open(v["respaldo"], "rb") as f:
         contenido = f.read()
-    # el archivo actual pasa a ser una versión más
-    if os.path.exists(actual):
-        try:
-            resp = ruta_respaldo(m["ruta"], v["archivo"])
-            shutil.move(actual, resp)
-            db.registrar_version(rel, v["tipo"], v["archivo"], resp)
-        except OSError:
-            pass
-    with open(actual, "wb") as f:
-        f.write(contenido)
-    return {"ok": True, "archivo": v["archivo"]}
+    return guardar_archivo(rel, v["tipo"], v["archivo"], contenido)
 
 
 # ---------------------------------------------------------------- servidor
@@ -1823,7 +1858,7 @@ class Handler(BaseHTTPRequestHandler):
             vistas = [modelo_vista(m, metas) for m in MODELOS]
             return self._send(200, {
                 "modelos": vistas,
-                "categorias": categorias_con_conteo(vistas),
+                "categorias": categorias_con_conteo([v for v in vistas if not v["oculto"]]),
                 "total": len(vistas),
                 "raiz": RAIZ,
                 "raices": [{"ruta": x, "principal": (i == 0),
@@ -1872,7 +1907,7 @@ class Handler(BaseHTTPRequestHandler):
             if not res:
                 return self._send(404, b"", "text/plain")
             body, ctype = res
-            return self._send(200, body, ctype, {"Cache-Control": "max-age=3600"})
+            return self._send(200, body, ctype, {"Cache-Control": "no-cache"})
 
         if r == "/api/archivo":
             p = arg("p")
@@ -1880,7 +1915,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, b"", "text/plain")
             ctype = mimetypes.guess_type(p)[0] or "application/octet-stream"
             with open(p, "rb") as f:
-                return self._send(200, f.read(), ctype, {"Cache-Control": "max-age=3600"})
+                return self._send(200, f.read(), ctype, {"Cache-Control": "no-cache"})
 
         if r == "/api/abrir":
             p, modo = arg("p"), arg("modo", "auto")
@@ -1985,6 +2020,10 @@ class Handler(BaseHTTPRequestHandler):
         if r == "/api/papelera":
             return self._send(200, {"items": db.papelera()})
 
+        if r == "/api/agregados/estado":
+            res = agregados.estado(arg("id"))
+            return self._send(200 if "estado" in res else 400, res)
+
         if r == "/api/cotizacion":
             return self._send(200, {
                 "materiales": db.materiales(),
@@ -2087,7 +2126,6 @@ class Handler(BaseHTTPRequestHandler):
             res = guardar_archivo(rel, tipo, nombre, datos)
             if "error" in res:
                 return self._send(400, res)
-            recargar_parcial(rel)
             return self._send(200, res)
 
         if r == "/api/restaurar":
@@ -2095,8 +2133,15 @@ class Handler(BaseHTTPRequestHandler):
             res = restaurar_version(d.get("rel", ""), d.get("id"))
             if "error" in res:
                 return self._send(400, res)
-            recargar_parcial(d.get("rel", ""))
             return self._send(200, res)
+
+        if r == "/api/agregados/confirmar":
+            res = agregados.confirmar(self._json().get("id"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/agregados/cancelar":
+            res = agregados.cancelar(self._json().get("id"))
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/cotizar":
             return self._send(200, cotizar(self._json()))
@@ -2183,6 +2228,21 @@ class Handler(BaseHTTPRequestHandler):
             _VIGILADOS.pop(self._json().get("rel", ""), None)
             return self._send(200, {"ok": True})
 
+        if r == "/api/modelos/asignar":
+            d = self._json()
+            res = asignar_modelos(d.get("rels"), d.get("categoria"), d.get("subcategoria", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/subcategoria/ordenar":
+            d = self._json()
+            res = ordenar_subcategorias(d.get("categoria"), d.get("orden"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/subcategoria/trasladar":
+            d = self._json()
+            res = trasladar_subcategoria(d.get("categoria"), d.get("subcategoria"), d.get("destino"))
+            return self._send(200 if res.get("ok") else 400, res)
+
         if r == "/api/categoria/crear":
             res = crear_categoria(self._json().get("nombre", ""))
             return self._send(200 if res.get("ok") else 400, res)
@@ -2262,7 +2322,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/papelera/vaciar":
-            return self._send(200, vaciar_papelera())
+            return self._send(400, vaciar_papelera())
 
         if r == "/api/actualizacion/aplicar":
             res = aplicar_actualizacion(self._json().get("zip", ""))
@@ -2306,30 +2366,67 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "no encontrado"})
 
 
-def recargar_parcial(rel):
-    """Re-lee los archivos de una carpeta tras subir/restaurar (sin reindexar todo)."""
-    m = POR_REL.get(rel)
-    if not m or not os.path.isdir(m["ruta"]):
-        return
-    a = {"corte": [], "imagen": [], "manual": [], "3d": [], "video": [], "otro": []}
-    for fn in os.listdir(m["ruta"]):
-        p = os.path.join(m["ruta"], fn)
-        if os.path.isdir(p) or fn.lower() in ("thumbs.db", "desktop.ini"):
+def contexto_carpeta(ruta):
+    for i, raiz in enumerate(raices()):
+        try:
+            if os.path.commonpath([os.path.abspath(ruta), os.path.abspath(raiz)]) == os.path.abspath(raiz):
+                marca = "" if i == 0 else "[%s]" % os.path.basename(raiz.rstrip(os.sep + "/"))
+                return raiz, marca
+        except ValueError:
             continue
-        e = os.path.splitext(fn)[1].lower()
-        if e in EXT_CORTE: a["corte"].append(fn)
-        elif e in EXT_IMAGEN: a["imagen"].append(fn)
-        elif e in EXT_MANUAL: a["manual"].append(fn)
-        elif e in {".stl", ".step", ".stp", ".sldprt", ".skp", ".obj"}: a["3d"].append(fn)
-        elif e in {".mp4", ".avi", ".mov", ".mkv"}: a["video"].append(fn)
-        elif e in {".zip", ".rar", ".7z"}: a["otro"].append(fn)
-    m["archivos"] = a
-    m["tiene_imagen"] = bool(a["imagen"]); m["tiene_manual"] = bool(a["manual"])
-    m["tiene_3d"] = bool(a["3d"]); m["tiene_video"] = bool(a["video"])
-    m["tiene_lightburn"] = any(f.lower().endswith((".lbrn", ".lbrn2")) for f in a["corte"])
-    m["n_corte"] = len(a["corte"])
-    if a["imagen"] and (not m.get("preview") or m["preview"] not in a["imagen"]):
-        m["preview"] = a["imagen"][0]
+    raise ValueError("Esa carpeta no pertenece a la biblioteca.")
+
+
+def invalidar_miniatura(rel):
+    thumb = os.path.join(CACHE_THUMBS, hashlib.md5(rel.encode("utf-8")).hexdigest() + ".jpg")
+    if os.path.isfile(thumb):
+        os.remove(thumb)
+
+
+def _releer_carpeta(ruta):
+    raiz, marca = contexto_carpeta(ruta)
+    rel = os.path.relpath(ruta, raiz)
+    if marca:
+        rel = os.path.join(marca, rel) if rel != "." else marca
+    anterior = POR_REL.get(rel)
+    nuevo = indexar.leer_modelo(ruta, raiz, marca,
+                               anterior["id"] if anterior else max((m["id"] for m in MODELOS), default=-1) + 1,
+                               POR_REL)
+    if anterior:
+        MODELOS.remove(anterior)
+        POR_REL.pop(rel, None)
+    if nuevo:
+        MODELOS.append(nuevo)
+        POR_REL[rel] = nuevo
+    invalidar_miniatura(rel)
+    return nuevo
+
+
+@db.exclusivo
+def recargar_parcial(rel):
+    """Misma entrada que el indexador completo; persistida antes de responder."""
+    m = POR_REL.get(rel)
+    if not m:
+        return
+    posicion = MODELOS.index(m)
+    nuevo = _releer_carpeta(m["ruta"])
+    if nuevo:
+        MODELOS.remove(nuevo)
+        MODELOS.insert(posicion, nuevo)
+    guardar_indice()
+    return nuevo
+
+
+@db.exclusivo
+def releer_arbol(ruta):
+    nuevos = []
+    for carpeta, dirs, _ in os.walk(ruta):
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d.lower() not in indexar.CARPETAS_INTERNAS)
+        m = _releer_carpeta(carpeta)
+        if m:
+            nuevos.append(m["rel"])
+    guardar_indice()
+    return nuevos
 
 
 def reordenar_si_hace_falta():

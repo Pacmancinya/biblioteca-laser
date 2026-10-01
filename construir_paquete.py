@@ -19,14 +19,14 @@ import os, shutil, sys, time
 BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "Biblioteca-Laser"
 
-INCLUIR = ["app.py", "db.py", "indexar.py", "categorias.py", "actualizar.py",
+INCLUIR = ["app.py", "db.py", "indexar.py", "agregados.py", "categorias.py", "actualizar.py",
            "elegir_carpeta.py", "ui.html", "lanzador.py", "migrar.py",
            "crear_acceso.py", "formatos.py", "dxf.py", "eps.py", "svg.py",
            "lbrn.py", "icono.ico",
            "INSTALAR.bat",
            "INICIAR Biblioteca.bat", "Actualizar modelos.bat",
            "Cambiar carpeta de modelos.bat", "Buscar actualizaciones.bat",
-           "SOLUCIONAR-PROBLEMAS.bat", "LEEME.txt", "EMPEZAR AQUI.txt"]
+           "SOLUCIONAR-PROBLEMAS.bat", "LEEME.txt", "EMPEZAR AQUI.txt", "version.json"]
 
 
 def build(salida):

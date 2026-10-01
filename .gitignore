@@ -2,6 +2,7 @@
 *.pyc
 .miniaturas/
 .venv/
+.prueba-v22-*/
 Biblioteca Laser.lnk
 EMPEZAR AQUI.txt
 __pycache__/

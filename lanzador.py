@@ -12,6 +12,7 @@ siguen funcionando: basta con reemplazar los .py.
 import os
 import sys
 import threading
+import json
 
 
 def carpeta():
@@ -139,6 +140,33 @@ def _sin_ventana():
         srv.shutdown()
 
 
+def registrar_arrastre(ventana, app):
+    """El listener Python habilita pywebviewFullPath en WebView2 (pywebview 5+)."""
+    from webview.dom import DOMEventHandler
+
+    def al_soltar(evento):
+        archivos = (evento.get("dataTransfer") or {}).get("files") or []
+        if not archivos:
+            return
+        rutas = [f.get("pywebviewFullPath") for f in archivos]
+        if not all(rutas):
+            ventana.evaluate_js("toast('Para agregar arrastrando, abre la Biblioteca desde su icono.',true)")
+            return
+        x, y = evento.get("clientX", 0), evento.get("clientY", 0)
+        destino = ventana.evaluate_js("destinoEnPunto(%s,%s)" % (json.dumps(x), json.dumps(y))) or {}
+        if destino.get("cargar"):
+            return
+        resultado = app.preparar_arrastre(rutas, destino.get("categoria", ""), destino.get("subcategoria", ""))
+        if resultado.get("ok"):
+            ventana.evaluate_js("recibirAgregado(%s)" % json.dumps(resultado["id"]))
+        else:
+            ventana.evaluate_js("toast(%s,true)" % json.dumps(resultado.get("error", "No pude agregarlo.")))
+
+    ventana.dom.document.events.dragover += DOMEventHandler(lambda e: None, prevent_default=True, debounce=500)
+    ventana.dom.document.events.drop += DOMEventHandler(al_soltar, prevent_default=True)
+    ventana.evaluate_js("window.arrastreNativo=true")
+
+
 def main():
     try:
         import app
@@ -181,6 +209,14 @@ def main():
                 pass
 
         ventana.events.closed += al_cerrar
+
+        def al_cargar():
+            try:
+                registrar_arrastre(ventana, app)
+            except Exception:
+                ventana.evaluate_js("window.arrastreNativo=false")
+
+        ventana.events.loaded += al_cargar
         webview.start(
             debug=False,
             private_mode=False,          # que recuerde el tema y los filtros

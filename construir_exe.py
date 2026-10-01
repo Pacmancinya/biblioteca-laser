@@ -41,7 +41,7 @@ NOMBRE = "Biblioteca Laser"
 GUIA = "empezar_aqui.txt"        # la guia corta que ve primero el usuario
 
 # lo que va SUELTO al lado del exe (se puede actualizar)
-APP = ["app.py", "db.py", "indexar.py", "categorias.py", "formatos.py",
+APP = ["app.py", "db.py", "indexar.py", "agregados.py", "categorias.py", "formatos.py",
        "dxf.py", "eps.py", "svg.py", "lbrn.py", "actualizar.py",
        "elegir_carpeta.py", "migrar.py", "ui.html", "LEEME.txt", "icono.ico"]
 

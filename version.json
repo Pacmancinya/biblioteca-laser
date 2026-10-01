@@ -1,6 +1,6 @@
 {
   "version": "2.2",
   "nombre": "Ordenado y tranquilo",
-  "novedades": "Ahora puedes plegar las categorías de arriba, los filtros y cada categoría de Ajustes. La app recuerda cómo los dejaste. Antes de cambiar el orden se guarda una copia: en Ajustes > Respaldo puedes volver a como estaba y también deshacer ese regreso. Cada día se guarda otra copia, con opción de llevarla a un pendrive u otro disco. Los botones de CorelDRAW y LightBurn muestran y abren un archivo que ya tienes; también funcionan los modelos que solo traen CDR en CorelDRAW. Ya no hay convertidor. Tus trabajos anteriores de la carpeta _convertidos quedan guardados.",
+  "novedades": "El basurero ahora solo quita el modelo de la biblioteca: tus archivos siguen en su carpeta, y puedes volver a verlo en Limpieza > Ver ocultos. La papelera anterior queda solo para recuperar. Arrastra modelos a categorías o subcategorías; Ctrl+clic permite marcar varios. En Ajustes puedes arrastrar categorías y subcategorías para ordenarlas o trasladarlas. Cada cambio de organización guarda respaldo. Desde el Explorador puedes soltar carpetas o archivos en la ventana para copiarlos a Agregados: pide confirmación, muestra avance, conserva los originales y nunca pisa nombres existentes. Las fotos, manuales y archivos que cargas se ven y quedan guardados al tiro, sin Releer carpeta. Siguen los paneles plegables, los respaldos diarios y los botones para abrir tus archivos existentes en CorelDRAW y LightBurn.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

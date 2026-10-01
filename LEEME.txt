@@ -52,19 +52,68 @@ Cuando esta escondida, abajo del nombre dice
 Queda guardado como lo dejes.
 
 
-QUITAR UN MODELO vs ELIMINARLO
-------------------------------
-En la ficha de un modelo, abajo, hay dos botones distintos:
+QUITAR UN MODELO DE LA BIBLIOTECA
+---------------------------------
+El basurero de la tarjeta, la ficha y los repetidos SOLO ESCONDE
+el modelo. Sus archivos siguen intactos en su carpeta.
+Para que vuelva: Limpieza -> Ver ocultos -> Volver a mostrar.
 
-  🙈 QUITAR DE LA BIBLIOTECA
-     Solo lo esconde de la app. Los archivos SIGUEN en tu
-     computador, en su carpeta de siempre. Sirve para limpiar
-     la vista de cosas que no usas.
-     Para recuperarlo: Limpieza -> "Ver ocultos".
+La papelera anterior se conserva solo para recuperar lo que ya
+estaba ahí. Ya no se mandan archivos a ella ni se puede vaciar.
 
-  🗑 ELIMINAR DEL COMPUTADOR
-     Manda la carpeta del modelo a la papelera de la app.
-     Para recuperarlo: Limpieza -> "Ver papelera".
+
+ORDENAR ARRASTRANDO
+--------------------
+Arrastra una tarjeta a una categoría o subcategoría de arriba.
+Las categorías se abren al arrastrar y el destino se resalta.
+Ctrl+clic marca varias tarjetas: puedes arrastrarlas juntas.
+
+Ajustes -> Categorías: arrastra el título para ordenar categorías.
+Arrastra una subcategoría sobre otra para ordenarlas, o a otra
+categoría grande para trasladarla. También están las flechas.
+Todo esto cambia solo la organización en la app, nunca el disco.
+
+Cada cambio guarda una copia antes.
+Si no te gusta: Respaldo -> Volver a como estaba.
+
+
+AGREGAR DESDE EL EXPLORADOR
+--------------------------
+Abre la Biblioteca desde su icono. Arrastra una o varias carpetas,
+una carpeta con muchas carpetas de modelos o archivos sueltos,
+y suéltalos sobre la ventana o sobre una categoría/subcategoría.
+
+Primero verás cuántos elementos y cuánto espacio ocupan.
+Se COPIAN: los originales quedan donde están.
+La copia va a la carpeta principal de modelos, dentro de Agregados.
+Si el nombre ya existe se crea otro, con (2), (3), etc.
+Los archivos sueltos van a una carpeta con el nombre del archivo.
+Si lo sueltas sobre una categoría, los nuevos quedan ahí.
+
+Se ve una barra y cuántos archivos se están copiando. Puedes seguir
+usando la ventana mientras copia. Al terminar aparecen los nuevos.
+Una carpeta aparece como modelo si contiene un archivo para cortar.
+Fotos y manuales sueltos también se copian; para adjuntarlos a un
+modelo existente usa su ficha -> Cargar archivos.
+
+No se agregan ejecutables ni accesos directos (.exe, .bat, .cmd,
+.lnk, .ps1, .vbs, .js, .msi), tampoco dentro de carpetas.
+Si hay uno, se rechaza la selección completa antes de copiar.
+Tampoco se siguen enlaces o carpetas enlazadas.
+Si falta espacio se avisa antes. Si el disco falla durante la copia,
+lo ya copiado queda en Agregados y se informa que quedó incompleta;
+los originales se conservan.
+
+En el navegador se indica que abras desde el icono para arrastrar.
+La ventana necesita pywebview 5 o posterior (INSTALAR.bat lo prepara).
+
+
+LOS ARCHIVOS QUE CARGAS SE VEN AL TIRO
+---------------------------------------
+Al agregar o reemplazar una foto, manual o archivo, o al recuperar
+una versión o un modelo de la papelera, la tarjeta y la ficha se
+actualizan y quedan guardadas sin apretar Releer carpeta.
+También los nombres, categorías, ocultos y reglas cambian al tiro.
 
 
 LAS CARPETAS DE MODELOS

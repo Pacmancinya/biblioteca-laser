@@ -119,6 +119,126 @@ def todas_las_carpetas():
     return carpetas
 
 
+def heredar_categoria(modelo, por_rel):
+    if modelo["categoria"] != "Otros":
+        return
+    partes = modelo["rel"].split(os.sep)
+    for corte in range(len(partes) - 1, 0, -1):
+        padre = por_rel.get(os.sep.join(partes[:corte]))
+        if padre and padre["categoria"] != "Otros":
+            modelo["categoria"] = padre["categoria"]
+            modelo["subcategoria"] = padre["subcategoria"]
+            break
+
+
+def leer_modelo(dirpath, carpeta_base, marca="", identificador=0, padres=None):
+    """Única lectura de una carpeta, usada por la app y el índice completo."""
+    filenames = sorted(e.name for e in os.scandir(dirpath) if e.is_file())
+    archivos = {"corte": [], "imagen": [], "manual": [], "3d": [], "video": [], "otro": []}
+    grosores = set()
+    tam_total = 0
+    mtime = 0
+
+    for fn in filenames:
+        if fn.lower() in IGNORAR:
+            continue
+        ext = os.path.splitext(fn)[1].lower()
+        full = os.path.join(dirpath, fn)
+        try:
+            st = os.stat(full)
+            tam_total += st.st_size
+            if st.st_mtime > mtime:
+                mtime = st.st_mtime
+        except OSError:
+            pass
+
+        if ext in CORTE:
+            archivos["corte"].append(fn)
+            for g in RE_GROSOR.findall(fn):
+                grosores.add(g.replace(",", ".") + "mm")
+        elif ext in IMAGEN:
+            archivos["imagen"].append(fn)
+        elif ext in MANUAL:
+            archivos["manual"].append(fn)
+        elif ext in TRES_D:
+            archivos["3d"].append(fn)
+        elif ext in VIDEO:
+            archivos["video"].append(fn)
+        elif ext in COMPRIM:
+            archivos["otro"].append(fn)
+
+    if not archivos["corte"]:
+        return None  # no es un modelo
+
+    rel = os.path.relpath(dirpath, carpeta_base)
+    partes = rel.split(os.sep)
+    nombre = partes[-1] if rel != "." else os.path.basename(carpeta_base.rstrip(os.sep + "/"))
+    if marca:
+        # la carpeta principal no lleva marca: asi los favoritos y precios
+        # que el usuario ya tenia guardados siguen calzando igual
+        rel = os.path.join(marca, rel) if rel != "." else marca
+
+    # preview: prefiere imagen con nombre parecido al de la carpeta, si no la primera
+    preview = ""
+    if archivos["imagen"]:
+        base = nombre.lower()
+        mejor = None
+        for im in archivos["imagen"]:
+            if os.path.splitext(im)[0].lower() in base or base in os.path.splitext(im)[0].lower():
+                mejor = im
+                break
+        preview = mejor or archivos["imagen"][0]
+
+    # extensiones de corte presentes (para filtrar por formato)
+    formatos = sorted({os.path.splitext(f)[1].lower().lstrip(".") for f in archivos["corte"]})
+
+    nom_limpio = limpiar_nombre(nombre)
+    cat, sub = categorias.clasificar(nom_limpio, partes)
+
+    modelo = {
+        "id": identificador,
+        "nombre": nom_limpio,
+        "nombre_real": nombre,
+        "ruta": dirpath,
+        "rel": rel,
+        "categoria": cat,
+        "subcategoria": sub,
+        "carpeta_origen": partes[0] if rel != "." else "",
+        "raiz": carpeta_base,
+        "ruta_partes": partes,
+        "archivos": archivos,
+        "n_corte": len(archivos["corte"]),
+        "n_imagen": len(archivos["imagen"]),
+        "formatos": formatos,
+        "grosores": sorted(grosores),
+        "preview": preview,
+        "tiene_manual": bool(archivos["manual"]),
+        "tiene_imagen": bool(archivos["imagen"]),
+        "tiene_3d": bool(archivos["3d"]),
+        "tiene_video": bool(archivos["video"]),
+        "tiene_lightburn": any(f.lower().endswith((".lbrn", ".lbrn2")) for f in archivos["corte"]),
+        "mb": round(tam_total / (1024 * 1024), 1),
+        "mtime": int(mtime),
+    }
+    heredar_categoria(modelo, padres or {})
+    return modelo
+
+
+def guardar_json_atomico(ruta, datos):
+    """Un fallo deja el índice anterior entero; el temporal vive en el mismo disco."""
+    import tempfile
+    fd, temporal = tempfile.mkstemp(prefix=".indice-", dir=os.path.dirname(os.path.abspath(ruta)))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporal, ruta)
+    finally:
+        if os.path.exists(temporal):
+            os.remove(temporal)
+
+
 def indexar():
     global RAIZ
     RAIZ = obtener_raiz()
@@ -141,108 +261,18 @@ def indexar():
         total_carpetas += 1
         dirnames[:] = [d for d in dirnames if not d.startswith(".") and d.lower() not in CARPETAS_INTERNAS]
 
-        archivos = {"corte": [], "imagen": [], "manual": [], "3d": [], "video": [], "otro": []}
-        grosores = set()
-        tam_total = 0
-        mtime = 0
-
-        for fn in filenames:
-            if fn.lower() in IGNORAR:
-                continue
-            ext = os.path.splitext(fn)[1].lower()
-            full = os.path.join(dirpath, fn)
-            try:
-                st = os.stat(full)
-                tam_total += st.st_size
-                if st.st_mtime > mtime:
-                    mtime = st.st_mtime
-            except OSError:
-                pass
-
-            if ext in CORTE:
-                archivos["corte"].append(fn)
-                for g in RE_GROSOR.findall(fn):
-                    grosores.add(g.replace(",", ".") + "mm")
-            elif ext in IMAGEN:
-                archivos["imagen"].append(fn)
-            elif ext in MANUAL:
-                archivos["manual"].append(fn)
-            elif ext in TRES_D:
-                archivos["3d"].append(fn)
-            elif ext in VIDEO:
-                archivos["video"].append(fn)
-            elif ext in COMPRIM:
-                archivos["otro"].append(fn)
-
-        if not archivos["corte"]:
-            continue  # no es un modelo
-
-        rel = os.path.relpath(dirpath, carpeta_base)
-        partes = rel.split(os.sep)
-        nombre = partes[-1] if rel != "." else os.path.basename(carpeta_base.rstrip(os.sep + "/"))
-        if marca:
-            # la carpeta principal no lleva marca: asi los favoritos y precios
-            # que el usuario ya tenia guardados siguen calzando igual
-            rel = os.path.join(marca, rel) if rel != "." else marca
-
-        # preview: prefiere imagen con nombre parecido al de la carpeta, si no la primera
-        preview = ""
-        if archivos["imagen"]:
-            base = nombre.lower()
-            mejor = None
-            for im in archivos["imagen"]:
-                if os.path.splitext(im)[0].lower() in base or base in os.path.splitext(im)[0].lower():
-                    mejor = im
-                    break
-            preview = mejor or archivos["imagen"][0]
-
-        # extensiones de corte presentes (para filtrar por formato)
-        formatos = sorted({os.path.splitext(f)[1].lower().lstrip(".") for f in archivos["corte"]})
-
-        nom_limpio = limpiar_nombre(nombre)
-        cat, sub = categorias.clasificar(nom_limpio, partes)
-
-        modelos.append({
-            "id": len(modelos),
-            "nombre": nom_limpio,
-            "nombre_real": nombre,
-            "ruta": dirpath,
-            "rel": rel,
-            "categoria": cat,
-            "subcategoria": sub,
-            "carpeta_origen": partes[0] if rel != "." else "",
-            "raiz": carpeta_base,
-            "ruta_partes": partes,
-            "archivos": archivos,
-            "n_corte": len(archivos["corte"]),
-            "n_imagen": len(archivos["imagen"]),
-            "formatos": formatos,
-            "grosores": sorted(grosores),
-            "preview": preview,
-            "tiene_manual": bool(archivos["manual"]),
-            "tiene_imagen": bool(archivos["imagen"]),
-            "tiene_3d": bool(archivos["3d"]),
-            "tiene_video": bool(archivos["video"]),
-            "tiene_lightburn": any(f.lower().endswith((".lbrn", ".lbrn2")) for f in archivos["corte"]),
-            "mb": round(tam_total / (1024 * 1024), 1),
-            "mtime": int(mtime),
-        })
+        m = leer_modelo(dirpath, carpeta_base, marca, len(modelos))
+        if m:
+            modelos.append(m)
 
     # --- Herencia: las subcarpetas técnicas ("Inch", "metric", "Old", "files"...)
     # toman la categoría del modelo que las contiene.
     por_rel = {m["rel"]: m for m in modelos}
     heredados = 0
     for m in modelos:
-        if m["categoria"] != "Otros":
-            continue
-        partes = m["rel"].split(os.sep)
-        for corte in range(len(partes) - 1, 0, -1):
-            padre = por_rel.get(os.sep.join(partes[:corte]))
-            if padre and padre["categoria"] != "Otros":
-                m["categoria"] = padre["categoria"]
-                m["subcategoria"] = padre["subcategoria"]
-                heredados += 1
-                break
+        antes = m["categoria"]
+        heredar_categoria(m, por_rel)
+        heredados += int(antes != m["categoria"])
 
     data = {
         "raiz": RAIZ,
@@ -257,8 +287,7 @@ def indexar():
         "categorias": categorias.estructura(),
         "modelos": modelos,
     }
-    with open(SALIDA, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
+    guardar_json_atomico(SALIDA, data)
 
     seg = round(time.time() - t0, 1)
     if len(carpetas) > 1:

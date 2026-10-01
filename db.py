@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS subcats (
   categoria    TEXT,
   subcategoria TEXT,
   oculta       INTEGER DEFAULT 0,
+  orden        INTEGER DEFAULT 999,
   PRIMARY KEY (categoria, subcategoria)
 );
 
@@ -204,6 +205,8 @@ def migrar(cx):
                 cx.execute(f"ALTER TABLE modelos ADD COLUMN {col} {tipo}")
             except sqlite3.OperationalError:
                 pass
+    if "orden" not in {r[1] for r in cx.execute("PRAGMA table_info(subcats)").fetchall()}:
+        cx.execute("ALTER TABLE subcats ADD COLUMN orden INTEGER DEFAULT 999")
     cx.commit()
 
 
@@ -330,14 +333,23 @@ def subcats_propias():
 
 
 def crear_subcat(categoria, subcategoria):
-    ejecutar("INSERT OR REPLACE INTO subcats (categoria, subcategoria, oculta) VALUES (?,?,0)",
+    ejecutar("INSERT INTO subcats (categoria, subcategoria, oculta) VALUES (?,?,0) "
+             "ON CONFLICT(categoria,subcategoria) DO UPDATE SET oculta=0",
              (categoria, subcategoria))
+
+
+def ordenar_subcats(categoria, nombres):
+    for i, nombre in enumerate(nombres):
+        crear_subcat(categoria, nombre)
+        ejecutar("UPDATE subcats SET orden=? WHERE categoria=? AND subcategoria=?",
+                 (i, categoria, nombre))
 
 
 def ocultar_subcat(categoria, subcategoria, oculta=1):
     """Esconder una subcategoría del clasificador (no se puede 'borrar' de verdad
     porque la calcula el programa, pero sí dejar de mostrarla)."""
-    ejecutar("INSERT OR REPLACE INTO subcats (categoria, subcategoria, oculta) VALUES (?,?,?)",
+    ejecutar("INSERT INTO subcats (categoria, subcategoria, oculta) VALUES (?,?,?) "
+             "ON CONFLICT(categoria,subcategoria) DO UPDATE SET oculta=excluded.oculta",
              (categoria, subcategoria, 1 if oculta else 0))
 
 

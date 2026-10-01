@@ -335,6 +335,13 @@
   #respaldosCont .arch{gap:12px;align-items:center;flex-wrap:wrap}
   #respaldosCont .btn{min-height:44px}
   button:disabled{cursor:default;opacity:.5}
+  .card.seleccionada{outline:3px solid var(--amb2);outline-offset:2px}
+  #v-biblio>details{position:sticky;top:0;z-index:4;background:var(--bg);padding-bottom:6px}
+  .quitar-card{position:absolute;bottom:8px;right:8px;border:0;border-radius:7px;background:var(--panel);color:var(--tx);width:36px;height:36px;cursor:pointer;z-index:2}
+  .destino-drag{outline:3px solid var(--amb2);background:var(--panel2)}
+  [draggable="true"]{cursor:grab}
+  #agregadoAvance{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:1100;background:var(--panel);border:2px solid var(--amb2);border-radius:12px;padding:14px 20px;max-width:90vw;min-width:320px;box-shadow:0 8px 35px #0008}
+  #agregadoAvance progress{width:100%;margin-top:8px}
 </style>
 </head>
 <body>
@@ -389,6 +396,7 @@
         <div class="cats" id="cats"></div>
         <div class="subs" id="subs"></div>
       </details>
+      <p class="sub">Arrastra un modelo a una categoría. Ctrl+clic para marcar varios. También puedes soltar carpetas del Explorador para agregarlas.</p>
       <div class="activos" id="activos"></div>
       <div class="grid" id="grid"></div>
       <div class="vacio" id="vacio" style="display:none">No hay modelos con esos filtros.</div>
@@ -418,7 +426,7 @@
     <!-- LIMPIEZA -->
     <div class="vista" id="v-limpieza">
       <h2 class="tit">Limpieza</h2>
-      <p class="sub">Encuentra modelos repetidos y recupera lo que borraste.</p>
+      <p class="sub">Esconde modelos repetidos y recupera lo que estaba en la papelera.</p>
       <div class="barra">
         <button class="btn pri" id="buscarDup">Buscar repetidos</button>
         <button class="btn" id="verPapelera">Ver papelera</button>
@@ -557,8 +565,7 @@
       <div class="mpanel" id="p-versiones"></div>
     </div>
     <div class="mf">
-      <button class="btn" id="dOcultar">🙈 Quitar de la biblioteca</button>
-      <button class="btn del" id="dBorrarModelo">🗑 Eliminar del computador</button>
+      <button class="btn" id="dOcultar">🗑 Quitar de la biblioteca</button>
     </div>
   </div>
 </div>
@@ -602,9 +609,12 @@
 </div>
 
 <div class="lupa-full" id="lupaFull"><img id="lupaImg" src="" alt=""></div>
+<div id="agregadoAvance" role="status" aria-live="polite" hidden><div id="agregadoTexto"></div><progress id="agregadoBarra" max="1" value="0"></progress></div>
 <div class="toast" id="toast"></div>
 
 <script>
+var MENSAJE_OCULTO='Listo, ya no se muestra. Tus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.';
+var seleccionados={}, revisionVista=Date.now();
 var D=null, MODELOS=[], CLIENTES=[], PEDIDOS=[], VENTAS=[];
 var filtrados=[], mostrados=0, LOTE=60, actual=null;
 var PROGS={};        // qué programa abre cada archivo del modelo abierto
@@ -624,6 +634,181 @@ function prepararPlegables(contenedor){
 }
 prepararPlegables();
 
+
+// ---------------- arrastrar: organización y copias desde el Explorador ----------------
+var MENSAJE_ORDEN='Listo. Si no te gusta, Respaldo -> Volver a como estaba.';
+var arrastre=null, ultimoHover='', jobAgregado=null;
+window.arrastreNativo=false;
+
+function refrescarModelo(rel){
+  return cargar().then(function(){
+    if(actual&&actual.rel===rel&&document.getElementById('velo').classList.contains('on')) return abrirModelo(rel);
+  });
+}
+function quitarModelo(rel){
+  if(!confirm('¿Quitar este modelo de la biblioteca?\n\nTus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.')) return;
+  api('/api/borrar-modelo',{rel:rel}).then(function(r){
+    if(!r.ok) return toast(r.error||'No pude quitarlo.',true);
+    delete seleccionados[rel];
+    if(actual&&actual.rel===rel) document.getElementById('velo').classList.remove('on');
+    toast(r.aviso||MENSAJE_OCULTO); cargar();
+  });
+}
+function destinoElemento(elemento){
+  if(!elemento) return {};
+  if(elemento.closest('#p-cargar .zona')) return {cargar:true};
+  var b=elemento.closest('[data-dest-cat]');
+  if(b) return {categoria:b.dataset.destCat,subcategoria:b.dataset.sub||''};
+  var c=elemento.closest('#catsCont [data-org-cat]');
+  return c?{categoria:c.dataset.orgCat,subcategoria:c.dataset.arrSub||''}:{};
+}
+function destinoEnPunto(x,y){return destinoElemento(document.elementFromPoint(x,y));}
+function limpiarDrag(){
+  document.querySelectorAll('.destino-drag').forEach(function(e){e.classList.remove('destino-drag')});
+}
+function esArchivo(e){return Array.from(e.dataTransfer.types||[]).indexOf('Files')>=0;}
+document.addEventListener('dragstart',function(e){
+  if(e.target.closest('button')){ e.preventDefault(); return; }
+  var card=e.target.closest('.card'), sub=e.target.closest('[data-arr-sub]'), cat=e.target.closest('[data-arr-cat]');
+  if(card){
+    if(!seleccionados[card.dataset.rel]) seleccionados={};
+    seleccionados[card.dataset.rel]=true;
+    grid.querySelectorAll('.card').forEach(function(c){c.classList.toggle('seleccionada',!!seleccionados[c.dataset.rel])});
+    arrastre={tipo:'modelos',rels:Object.keys(seleccionados).filter(function(r){return seleccionados[r]})};
+    var panel=document.querySelector('[data-plegable="categorias-biblioteca"]');
+    if(panel) panel.open=true;
+  } else if(sub) arrastre={tipo:'subcategoria',categoria:sub.dataset.orgCat,subcategoria:sub.dataset.arrSub};
+  else if(cat) arrastre={tipo:'categoria',categoria:cat.dataset.arrCat};
+  else return;
+  e.dataTransfer.setData('application/x-biblioteca',JSON.stringify(arrastre));
+  e.dataTransfer.effectAllowed='move';
+});
+document.addEventListener('dragover',function(e){
+  if(!arrastre&&!esArchivo(e)) return;
+  if(e.target.closest('#p-cargar .zona')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect=esArchivo(e)?'copy':'move';
+  var panel=document.querySelector('[data-plegable="categorias-biblioteca"]');
+  if(panel&&(st.vista==='biblio'||st.vista==='fav')) panel.open=true;
+  var target=e.target.closest('[data-dest-cat], #catsCont [data-org-cat]');
+  limpiarDrag();
+  if(target){
+    target.classList.add('destino-drag');
+    if(target.matches('.cat-b')&&target.dataset.destCat!==ultimoHover){
+      ultimoHover=target.dataset.destCat; pintarSubs(ultimoHover);
+    }
+    var grupo=target.closest('details.catg');
+    if(grupo&&arrastre&&arrastre.tipo==='subcategoria') grupo.open=true;
+  }
+});
+document.addEventListener('dragend',function(){arrastre=null;ultimoHover='';limpiarDrag();pintarSubs();});
+document.addEventListener('dragleave',function(e){if(!e.relatedTarget) limpiarDrag();});
+document.addEventListener('drop',function(e){
+  if(e.target.closest('#p-cargar .zona')) return;
+  if(!arrastre&&!esArchivo(e)) return;
+  e.preventDefault(); limpiarDrag();
+  if(esArchivo(e)){
+    if(!window.arrastreNativo) toast('Para agregar arrastrando, abre la Biblioteca desde su icono.',true);
+    return; // Python recibe pywebviewFullPath y prepara el plan, nunca File.name.
+  }
+  var payload=arrastre; arrastre=null;
+  if(!payload) return;
+  var destino=destinoElemento(e.target), peticion;
+  if(payload.tipo==='modelos'&&destino.categoria){
+    peticion=api('/api/modelos/asignar',{rels:payload.rels,categoria:destino.categoria,subcategoria:destino.subcategoria});
+  } else if(payload.tipo==='categoria'){
+    var cat=e.target.closest('#catsCont [data-org-cat]');
+    if(!cat||cat.dataset.orgCat===payload.categoria) return;
+    var orden=(D.categorias||[]).map(function(c){return c.nombre}).filter(function(c){return c!==payload.categoria});
+    orden.splice(orden.indexOf(cat.dataset.orgCat),0,payload.categoria);
+    peticion=api('/api/categoria/ordenar',{orden:orden});
+  } else if(payload.tipo==='subcategoria'){
+    var fila=e.target.closest('#catsCont [data-arr-sub]'), grupo=e.target.closest('#catsCont [data-org-cat]');
+    if(!grupo) return;
+    if(grupo.dataset.orgCat!==payload.categoria){
+      peticion=api('/api/subcategoria/trasladar',{categoria:payload.categoria,subcategoria:payload.subcategoria,destino:grupo.dataset.orgCat});
+    } else {
+      var g=(D.categorias||[]).find(function(c){return c.nombre===payload.categoria});
+      var subs=g.subs.map(function(s){return s.nombre}).filter(function(s){return s!==payload.subcategoria});
+      var posicion=fila?subs.indexOf(fila.dataset.arrSub):subs.length;
+      if(posicion<0) return;
+      subs.splice(posicion,0,payload.subcategoria);
+      peticion=api('/api/subcategoria/ordenar',{categoria:payload.categoria,orden:subs});
+    }
+  }
+  if(peticion) peticion.then(function(r){
+    if(!r.ok) return toast(r.error||'No pude guardar el orden.',true);
+    seleccionados={}; toast(MENSAJE_ORDEN);
+    cargar().then(function(){
+      if(st.vista==='ajustes') verCategorias();
+      if(actual&&document.getElementById('velo').classList.contains('on')) abrirModelo(actual.rel);
+    });
+  }).catch(function(){toast('No pude guardar el orden.',true)});
+});
+function tamañoAgregado(bytes){
+  var gb=bytes/(1024*1024*1024), mb=bytes/(1024*1024);
+  return (gb>=1?gb:mb).toLocaleString('es-CL',{maximumFractionDigits:1})+(gb>=1?' GB':' MB');
+}
+function mostrarNuevos(rels,categoria,subcategoria){
+  document.getElementById('velo').classList.remove('on');
+  return cargar().then(function(){
+    st.q=''; qEl.value=''; st.cat=categoria||''; st.sub=subcategoria||''; st.flags={};st.fmt='';st.gr='';st.verOcultos=false;
+    var nuevos=new Set(rels||[]);
+    MODELOS=MODELOS.filter(function(m){return nuevos.has(m.rel)}).concat(MODELOS.filter(function(m){return !nuevos.has(m.rel)}));
+    sincronizarBotones();
+    document.querySelector('#tabs [data-v="biblio"]').click();
+    pintarCategorias(); aplicar();
+    document.getElementById('main').scrollTop=0;
+  });
+}
+function recibirAgregado(id){
+  jobAgregado=id;
+  var caja=document.getElementById('agregadoAvance'), txt=document.getElementById('agregadoTexto'), barra=document.getElementById('agregadoBarra');
+  caja.hidden=false; txt.textContent='Revisando qué vas a agregar...'; barra.removeAttribute('value');
+  function revisar(){
+    api('/api/agregados/estado?id='+encodeURIComponent(id)).then(function(r){
+      if(jobAgregado!==id) return;
+      if(r.estado==='confirmar'){
+        var cantidad=[];
+        if(r.carpetas) cantidad.push(r.carpetas+' carpeta'+(r.carpetas===1?'':'s'));
+        if(r.sueltos) cantidad.push(r.sueltos+' archivo'+(r.sueltos===1?'':'s'));
+        caja.hidden=true;
+        var mensaje='Vas a agregar '+cantidad.join(' y ')+' ('+tamañoAgregado(r.bytes)+') a tu biblioteca.\n\nSe copian; los originales quedan donde están.\nSe guardan en Agregados, sin pisar lo que ya existe.'
+          +(r.categoria?'\n\nCategoría: '+r.categoria+(r.subcategoria?' -> '+r.subcategoria:''):'');
+        if(!confirm(mensaje)){
+          api('/api/agregados/cancelar',{id:id}); jobAgregado=null; return;
+        }
+        caja.hidden=false;txt.textContent='Preparando la copia...';
+        api('/api/agregados/confirmar',{id:id}).then(function(res){
+          if(!res.ok){caja.hidden=true;jobAgregado=null;toast(res.error||'No pude iniciar la copia.',true);return;}
+          setTimeout(revisar,350);
+        }).catch(fallo);
+        return;
+      }
+      if(r.estado==='error'||r.error){
+        caja.hidden=true;jobAgregado=null;toast(r.error||'No pude agregarlo.',true);
+        if((r.nuevos||[]).length) mostrarNuevos(r.nuevos,r.categoria,r.subcategoria);
+        return;
+      }
+      if(r.estado==='listo'){
+        caja.hidden=true;jobAgregado=null;
+        mostrarNuevos(r.nuevos,r.categoria,r.subcategoria).then(function(){
+          toast((r.nuevos||[]).length
+            ? 'Listo. '+r.nuevos.length+' modelos agregados. Tus originales siguen donde estaban.'+(r.categoria?' Si no te gusta, Respaldo -> Volver a como estaba.':'')
+            : 'Listo, copiados a Agregados. Una carpeta aparece como modelo cuando tiene un archivo para cortar.');
+        });
+        return;
+      }
+      if(r.estado==='cancelado'){caja.hidden=true;jobAgregado=null;return;}
+      txt.textContent=r.estado==='leyendo'?'Leyendo los modelos nuevos...':r.estado==='copiando'?'Copiando '+r.copiados+' de '+r.total+' archivos':'Revisando qué vas a agregar...';
+      if(r.estado==='copiando'){barra.max=Math.max(1,r.bytes);barra.value=r.bytes_copiados||0;}else barra.removeAttribute('value');
+      setTimeout(revisar,350);
+    }).catch(fallo);
+  }
+  function fallo(){caja.hidden=true;jobAgregado=null;toast('No pude consultar el avance de la copia. Revisa Agregados antes de volver a intentarlo.',true);}
+  revisar();
+}
+
 // ---------------- tema claro / oscuro ----------------
 function aplicarTema(t){
   document.documentElement.setAttribute('data-tema', t);
@@ -641,15 +826,19 @@ function norm(s){return (s||'').toString().toLowerCase().normalize('NFD').replac
 function clp(n){return '$'+Math.round(n||0).toLocaleString('es-CL')}
 function fech(t){ if(!t) return '—'; var d=new Date(t*1000); return d.toLocaleDateString('es-CL'); }
 function hoy(){ return Math.floor(Date.now()/1000); }
-function toast(m,e){var t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(function(){t.className='toast'},2500)}
+function toast(m,e){var t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(function(){t.className='toast'},m.length>90?11000:5000)}
 function api(u,d){ return fetch(u, d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:undefined).then(function(r){return r.json()}) }
 
 // ---------------- carga ----------------
 function cargar(){
   return api('/api/datos').then(function(d){
-    D=d; MODELOS=d.modelos; CLIENTES=d.clientes||[];
+    D=d; MODELOS=d.modelos; CLIENTES=d.clientes||[]; revisionVista=Date.now();
+    document.querySelectorAll('[data-deldup]').forEach(function(b){
+      var m=MODELOS.find(function(m){return m.rel===b.dataset.deldup});
+      if(!m||m.oculto) b.closest('.dupi').remove();
+    });
     document.getElementById('cargando').style.display='none';
-    filtrosLaterales(); pintarCategorias(); aplicar(); actualizarPills();
+    filtrosLaterales(); pintarCategorias(); aplicar(true); actualizarPills();
     if(d.aviso_respaldo) toast(d.aviso_respaldo,true);
   });
 }
@@ -674,20 +863,21 @@ function pintarCategorias(){
   var tot=MODELOS.length;
   var h='<div class="cat-b'+(st.cat?'':' on')+'" data-cat=""><div class="ic">✳️</div><div class="nm">Todos</div><div class="n">'+tot.toLocaleString('es-CL')+'</div></div>';
   h+=(D.categorias||[]).map(function(c){
-    return '<div class="cat-b'+(st.cat===c.nombre?' on':'')+'" data-cat="'+esc(c.nombre)+'">'
+    return '<div class="cat-b'+(st.cat===c.nombre?' on':'')+'" data-cat="'+esc(c.nombre)+'" data-dest-cat="'+esc(c.nombre)+'">'
       +'<div class="ic">'+(ICONOS[c.nombre]||'📁')+'</div><div class="nm">'+esc(c.nombre)+'</div>'
       +'<div class="n">'+c.n.toLocaleString('es-CL')+'</div></div>';
   }).join('');
   document.getElementById('cats').innerHTML=h;
   pintarSubs();
 }
-function pintarSubs(){
+function pintarSubs(hover){
+  var categoria=typeof hover==='string'?hover:st.cat;
   var cont=document.getElementById('subs');
   document.getElementById('categoriaActiva').textContent=st.cat ? ' · '+st.cat+(st.sub?' › '+st.sub:'') : '';
-  if(!st.cat){ cont.innerHTML=''; return; }
-  var g=(D.categorias||[]).find(function(c){return c.nombre===st.cat});
+  if(!categoria){ cont.innerHTML=''; return; }
+  var g=(D.categorias||[]).find(function(c){return c.nombre===categoria});
   cont.innerHTML = (g&&g.subs.length)
-    ? g.subs.map(function(s){ return '<button class="sb'+(st.sub===s.nombre?' on':'')+'" data-sub="'+esc(s.nombre)+'">'+esc(s.nombre)+'<span class="n">'+s.n+'</span></button>' }).join('')
+    ? g.subs.map(function(s){ return '<button class="sb'+(st.sub===s.nombre?' on':'')+'" data-sub="'+esc(s.nombre)+'" data-dest-cat="'+esc(categoria)+'">'+esc(s.nombre)+'<span class="n">'+s.n+'</span></button>' }).join('')
     : '';
 }
 document.getElementById('cats').addEventListener('click',function(e){
@@ -698,6 +888,7 @@ document.getElementById('cats').addEventListener('click',function(e){
 });
 document.getElementById('subs').addEventListener('click',function(e){
   var b=e.target.closest('[data-sub]'); if(!b) return;
+  st.cat=b.dataset.destCat;
   st.sub = (st.sub===b.dataset.sub)?'':b.dataset.sub;
   pintarSubs(); aplicar();
 });
@@ -744,7 +935,8 @@ function limpiarFiltros(){
 }
 
 // ---------------- filtrado ----------------
-function aplicar(){
+function aplicar(conservar){
+  var anterior=mostrados, scroll=document.getElementById('main').scrollTop;
   var q=norm(st.q).split(/\s+/).filter(Boolean);
   filtrados=MODELOS.filter(function(m){
     if(m.oculto && !st.verOcultos) return false;
@@ -765,6 +957,7 @@ function aplicar(){
   document.getElementById('cuenta').innerHTML='<b>'+filtrados.length.toLocaleString('es-CL')+'</b> de '+MODELOS.length.toLocaleString('es-CL');
   pintarActivos();
   lote();
+  if(conservar===true){ while(mostrados<Math.min(anterior,filtrados.length)) lote(); document.getElementById('main').scrollTop=scroll; }
 }
 var SINIMG='<svg class="noimg" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>';
 function lote(){
@@ -772,9 +965,10 @@ function lote(){
   for(var i=mostrados;i<fin;i++){ var m=filtrados[i];
     var b=''; if(m.lb)b+='<span class="bdg lb">LBRN</span>'; if(m.man)b+='<span class="bdg man">PDF</span>';
     if(m.d3)b+='<span class="bdg d3">3D</span>'; if(m.stock>0)b+='<span class="bdg stk">'+m.stock+'</span>';
-    h+='<div class="card" data-rel="'+esc(m.rel)+'">'
-      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'" onerror="this.style.display=\'none\'">':SINIMG)
+    h+='<div class="card'+(seleccionados[m.rel]?' seleccionada':'')+'" draggable="true" data-rel="'+esc(m.rel)+'">'
+      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'&v='+revisionVista+'" onerror="this.style.display=\'none\'">':SINIMG)
       + '<button class="estrella'+(m.fav?' on':'')+'" data-fav="'+esc(m.rel)+'"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9L6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg></button>'
+      + '<button class="quitar-card" data-quitar-modelo="'+esc(m.rel)+'" title="Quitar de la biblioteca; tus archivos siguen en su carpeta">🗑</button>'
       + '<div class="badges">'+b+'</div></div>'
       + '<div class="info"><div class="nm">'+esc(m.n)+'</div><div class="rt">'+esc(m.ruta_partes.slice(0,2).join(' › '))+'</div>'
       + (m.precio?'<div class="pr">'+clp(m.precio)+'</div>':'')+'</div></div>';
@@ -814,6 +1008,10 @@ document.getElementById('tabs').addEventListener('click',function(e){
 
 // ---------------- favoritos ----------------
 grid.addEventListener('click',function(e){
+  var quitar=e.target.closest('[data-quitar-modelo]');
+  if(quitar){ e.stopPropagation(); quitarModelo(quitar.dataset.quitarModelo); return; }
+  var tarjeta=e.target.closest('.card');
+  if(tarjeta&&(e.ctrlKey||e.metaKey)&&!e.target.closest('button')){ seleccionados[tarjeta.dataset.rel]=!seleccionados[tarjeta.dataset.rel]; tarjeta.classList.toggle('seleccionada',seleccionados[tarjeta.dataset.rel]); return; }
   var f=e.target.closest('[data-fav]');
   if(f){ e.stopPropagation(); var rel=f.dataset.fav;
     api('/api/favorito',{rel:rel}).then(function(r){
@@ -826,7 +1024,10 @@ grid.addEventListener('click',function(e){
 
 // ---------------- modal modelo ----------------
 function abrirModelo(rel){
-  api('/api/modelo?rel='+encodeURIComponent(rel)).then(function(m){
+  var misma=actual&&actual.rel===rel;
+  var tab=document.querySelector('.mtab.on'), pesta=misma&&tab?tab.dataset.p:'archivos';
+  var scrollFicha=document.querySelector('#velo .mb').scrollTop;
+  return api('/api/modelo?rel='+encodeURIComponent(rel)).then(function(m){
     actual=m; var v=MODELOS.find(function(x){return x.rel===rel})||{};
     document.getElementById('dTit').textContent=v.n||m.nombre;
     document.getElementById('dRuta').textContent=m.rel;
@@ -850,7 +1051,7 @@ function abrirModelo(rel){
     var prev=document.getElementById('dPrev');
     // si no hay foto, se muestra la miniatura que trae adentro el archivo de LightBurn
     var src = m.preview ? '/api/archivo?p='+encodeURIComponent(m.ruta+'\\'+m.preview)
-            : (v.prev ? '/thumb?rel='+encodeURIComponent(m.rel) : '');
+            : (v.prev ? '/thumb?rel='+encodeURIComponent(m.rel)+'&v='+revisionVista : '');
     if(src){
       prev.innerHTML='<img src="'+esc(src)+'" onerror="this.parentNode.innerHTML=SINIMG">';
       prev.querySelector('img').onclick=function(){document.getElementById('lupaImg').src=src;document.getElementById('lupaFull').classList.add('on')};
@@ -897,14 +1098,15 @@ function abrirModelo(rel){
         h+='<div class="arch"><span class="ax">'+esc(ext)+'</span><span class="an">'+esc(f)+'</span>'
           +'<button data-act="auto" data-f="'+esc(f)+'" title="'+esc(tit)+'"'+(pg&&!pg.instalado?' class="apagado"':'')+'>'+esc(txt)+'</button>'
           +'<button class="bo" data-otro="'+esc(f)+'" title="Abrir con otro programa">⋯</button>'
-          +'<button class="bx" data-borrar="'+esc(f)+'" title="Enviar a la papelera">🗑</button></div>'});
+          +'</div>'});
       h+='</div>'});
     document.getElementById('dArch').innerHTML=h;
     var bo=document.getElementById('dOcultar');
-    bo.textContent = v.oculto ? '👁 Volver a mostrar' : '🙈 Quitar de la biblioteca';
+    bo.textContent = v.oculto ? '👁 Volver a mostrar' : '🗑 Quitar de la biblioteca';
     panelEditar(m,v); panelCotizar(m,v); panelCargar(m); panelVersiones(m);
-    document.querySelector('.mtab[data-p="archivos"]').click();
+    document.querySelector('.mtab[data-p="'+pesta+'"]').click();
     document.getElementById('velo').classList.add('on');
+    if(misma) document.querySelector('#velo .mb').scrollTop=scrollFicha;
   });
 }
 document.getElementById('mtabs').addEventListener('click',function(e){
@@ -922,22 +1124,11 @@ document.getElementById('dOcultar').addEventListener('click',function(){
   if(!confirm(msg)) return;
   api('/api/ocultar',{rel:actual.rel}).then(function(r){
     if(!r.ok) return toast(r.error||'No se pudo',true);
-    toast(r.oculto?'Quitado de la biblioteca (sigue en tu PC)':'Vuelve a estar visible');
+    toast(r.oculto?MENSAJE_OCULTO:'Vuelve a estar visible');
     document.getElementById('velo').classList.remove('on');
-    cargar().then(function(){aplicar()});
+    cargar();
   });
 });
-document.getElementById('dBorrarModelo').addEventListener('click',function(){
-  if(!actual) return;
-  var nom=document.getElementById('dTit').textContent;
-  if(!confirm('¿ELIMINAR "'+nom+'" de tu computador?\n\nSe mueve toda la carpeta a la papelera de la app.\nSi solo quieres que no aparezca, usa "Quitar de la biblioteca".')) return;
-  api('/api/borrar-modelo',{rel:actual.rel}).then(function(r){
-    if(r.ok){ toast('Modelo enviado a la papelera'); document.getElementById('velo').classList.remove('on');
-      cargar().then(function(){aplicar()}); }
-    else toast(r.error||'No se pudo',true);
-  });
-});
-
 // ---------------- limpieza: duplicados + papelera ----------------
 document.getElementById('buscarDup').onclick=function(){
   var c=document.getElementById('dupCont');
@@ -948,7 +1139,7 @@ document.getElementById('buscarDup').onclick=function(){
     DUP=g; DUP_MOSTRADOS=0;
     var tot=g.reduce(function(a,x){return a+x.length-1},0);
     c.innerHTML='<div class="caja"><h4>'+g.length+' grupos de repetidos ('+tot+' modelos de más)</h4>'
-      +'<p class="sub">Marcados con “más completo” los que tienen más archivos. Revisa y borra el que no quieras: va a la papelera.</p>'
+      +'<p class="sub">Marcados con “más completo” los que tienen más archivos. Quita el que no quieras ver. Sus archivos siguen en su carpeta.</p>'
       +'<div id="dupLista"></div><div style="text-align:center;margin-top:12px"><button class="btn" id="dupMas">Mostrar más</button></div></div>';
     pintarDupLote();
   }).catch(function(){c.innerHTML='<div class="caja"><p class="sub">No se pudo revisar.</p></div>'});
@@ -959,13 +1150,13 @@ function pintarDupLote(){
     var h=g.slice(DUP_MOSTRADOS,fin).map(function(gr,k){
         var i=DUP_MOSTRADOS+k;
         return '<div class="dupg"><h5>Repetido '+(i+1)+' — '+gr.length+' copias</h5>'
-          + gr.map(function(m,j){
+          + gr.filter(function(m){return !MODELOS.some(function(v){return v.rel===m.rel&&v.oculto})}).map(function(m,j){
             return '<div class="dupi">'
               +(m.prev?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'">':'<div class="th"></div>')
               +'<div class="dn"><b>'+esc(m.nombre)+(j===0?' <span class="mejor">más completo</span>':'')+'</b>'
               +'<small>'+esc(m.ruta)+' · '+m.n_corte+' archivos · '+m.mb+' MB'+(m.fav?' · ★':'')+'</small></div>'
               +'<button class="btn mini" data-verdup="'+esc(m.rel)+'">Ver</button>'
-              +'<button class="btn mini del" data-deldup="'+esc(m.rel)+'">Borrar</button></div>';
+              +'<button class="btn mini del" data-deldup="'+esc(m.rel)+'">🗑 Quitar de la biblioteca</button></div>';
           }).join('')+'</div>';
       }).join('');
     document.getElementById('dupLista').insertAdjacentHTML('beforeend',h);
@@ -996,7 +1187,7 @@ function verPapelera(){
         +it.map(function(x){return '<tr><td><b>'+esc(x.nombre)+'</b><br><small style="color:var(--tx3)">'+esc(x.rel||'')+'</small></td>'
           +'<td>'+(x.tipo==='modelo'?'modelo completo':'archivo')+'</td><td>'+fech(x.fecha)+'</td>'
           +'<td><button class="btn mini" data-restaurar="'+x.id+'">Recuperar</button></td></tr>'}).join('')
-        +'</table><div class="barra" style="margin-top:14px"><button class="btn del" id="vaciarPap">Vaciar papelera definitivamente</button></div>'
+        +'</table>'
        : '<p class="sub">La papelera está vacía.</p>')+'</div>';
   });
 }
@@ -1005,36 +1196,24 @@ document.getElementById('v-limpieza').addEventListener('click',function(e){
   var v=e.target.closest('[data-verdup]'); if(v) return abrirModelo(v.dataset.verdup);
   var d=e.target.closest('[data-deldup]');
   if(d){
-    if(!confirm('¿Enviar este modelo a la papelera?\n\nPodrás recuperarlo después.')) return;
+    if(!confirm('¿Quitar este modelo de la biblioteca?\n\nSus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.')) return;
     api('/api/borrar-modelo',{rel:d.dataset.deldup}).then(function(r){
-      if(r.ok){ toast('Enviado a la papelera'); d.closest('.dupi').style.opacity=.35; d.disabled=true;
-        cargar(); verPapelera(); } else toast(r.error||'No se pudo',true) });
+      if(r.ok){ toast(r.aviso||MENSAJE_OCULTO); d.closest('.dupi').remove();
+        cargar(); verOcultos(); } else toast(r.error||'No se pudo',true) });
     return;
   }
   var mo=e.target.closest('[data-mostrar]');
   if(mo){ api('/api/ocultar',{rel:mo.dataset.mostrar}).then(function(r){
       if(!r.ok){toast(r.error||'No pude volver a mostrarlo.',true);return;}
-      toast('Vuelve a estar visible'); verOcultos(); cargar().then(function(){aplicar()}) }); return; }
+      toast('Vuelve a estar visible'); verOcultos(); cargar() }); return; }
   var re=e.target.closest('[data-restaurar]');
   if(re){ api('/api/papelera/restaurar',{id:+re.dataset.restaurar}).then(function(r){
-      if(r.ok){ toast('Recuperado'); verPapelera(); if(r.tipo==='modelo') api('/api/reindexar',{}).then(function(x){if(x.ok)cargar();else toast(x.error||'No pude releer los modelos',true)}); else cargar(); }
+      if(r.ok){ toast('Recuperado'); verPapelera(); cargar(); }
       else toast(r.error||'No se pudo',true) }); return; }
-  if(e.target.id==='vaciarPap'){
-    if(!confirm('¿Vaciar la papelera?\n\nEsto SÍ borra los archivos para siempre y no se puede deshacer.')) return;
-    api('/api/papelera/vaciar',{}).then(function(r){ toast('Papelera vaciada'); verPapelera(); });
-  }
+
 });
 document.getElementById('velo').addEventListener('click',function(e){
   if(e.target===this){this.classList.remove('on');return}
-  // borrar un archivo
-  var bb=e.target.closest('[data-borrar]');
-  if(bb&&actual){
-    var f=bb.dataset.borrar;
-    if(!confirm('¿Enviar "'+f+'" a la papelera?\n\nPodrás recuperarlo desde Limpieza → Papelera.')) return;
-    api('/api/borrar-archivo',{rel:actual.rel,nombre:f}).then(function(r){
-      if(r.ok){toast('Enviado a la papelera');abrirModelo(actual.rel);cargar()} else toast(r.error||'No se pudo',true)});
-    return;
-  }
   // botones apagados (no hay ese archivo): llevan a la pestaña para agregarlo
   var fa=e.target.closest('[data-falta]');
   if(fa){
@@ -1050,7 +1229,7 @@ document.getElementById('velo').addEventListener('click',function(e){
   if(pr&&actual){
     api('/api/principal',{rel:actual.rel,nombre:pr.dataset.principal}).then(function(r){
       if(r.ok){ toast('Listo: «'+r.principal+'» es ahora el archivo principal');
-                abrirModelo(actual.rel); cargar(); }
+                refrescarModelo(actual.rel); }
       else toast(r.error||'No se pudo', true);
     });
     return;
@@ -1176,7 +1355,7 @@ function panelEditar(m,v){
     var d={rel:m.rel,nombre:val('e_nombre'),categoria:val('e_cat'),subcategoria:val('e_sub'),
       costo:numv('e_costo'),precio:numv('e_precio'),stock:numv('e_stock')||0,
       cliente_id:val('e_cli')||null,notas:val('e_notas')};
-    api('/api/meta',d).then(function(){ toast('Guardado'); cargar().then(function(){ aplicar(); }); });
+    api('/api/meta',d).then(function(r){ if(!r.ok) return toast(r.error||'No pude guardar.',true); toast('Guardado'); refrescarModelo(m.rel); });
   };
 }
 function val(id){var e=document.getElementById(id);return e?e.value.trim():''}
@@ -1260,7 +1439,7 @@ function panelCargar(m){
     z.onclick=function(){inp.click()};
     z.ondragover=function(e){e.preventDefault();z.classList.add('drag')};
     z.ondragleave=function(){z.classList.remove('drag')};
-    z.ondrop=function(e){e.preventDefault();z.classList.remove('drag');if(e.dataTransfer.files[0])subir(z.dataset.tipo,e.dataTransfer.files[0])};
+    z.ondrop=function(e){e.preventDefault();e.stopPropagation();z.classList.remove('drag');if(e.dataTransfer.files[0])subir(z.dataset.tipo,e.dataTransfer.files[0])};
     inp.onchange=function(){if(inp.files[0])subir(z.dataset.tipo,inp.files[0])};
   });
 }
@@ -1268,7 +1447,7 @@ function subir(tipo,file){
   toast('Subiendo '+file.name+'...');
   fetch('/api/subir?rel='+encodeURIComponent(actual.rel)+'&tipo='+tipo+'&nombre='+encodeURIComponent(file.name),
     {method:'POST',body:file}).then(function(r){return r.json()}).then(function(r){
-      if(r.ok){ toast('Archivo guardado'); abrirModelo(actual.rel); cargar(); }
+      if(r.ok){ toast('Archivo guardado'); refrescarModelo(actual.rel); }
       else toast(r.error||'No se pudo subir',true);
     }).catch(function(){toast('Error al subir',true)});
 }
@@ -1285,7 +1464,7 @@ function panelVersiones(m){
   document.getElementById('p-versiones').querySelectorAll('[data-ver]').forEach(function(b){
     b.onclick=function(){ if(!confirm('¿Volver a esta versión? La actual se guarda en el historial.'))return;
       api('/api/restaurar',{rel:actual.rel,id:+b.dataset.ver}).then(function(r){
-        if(r.ok){toast('Versión restaurada');abrirModelo(actual.rel)} else toast(r.error||'No se pudo',true)}) };
+        if(r.ok){toast('Versión restaurada');refrescarModelo(actual.rel)} else toast(r.error||'No se pudo',true)}) };
   });
 }
 
@@ -1451,7 +1630,7 @@ document.getElementById('btnAgregarCarpeta').onclick=function(){
   toast('Leyendo la carpeta, espera...');
   api('/api/carpeta/agregar',{carpeta:r.trim()}).then(function(res){
     if(res.ok){ toast('Listo · '+res.total.toLocaleString('es-CL')+' modelos en '+res.carpetas+' carpetas');
-                cargar().then(function(){ verAjustes(); aplicar(); }); }
+                cargar().then(function(){ verAjustes(); }); }
     else toast(res.error||'No se pudo', true);
   });
 };
@@ -1476,7 +1655,7 @@ function verCategorias(){
     +'<button class="btn" id="catCarpeta">📁 Una carpeta entera a una categoría</button></div>';
   if(cats.length>=6) h+='<p class="sub">Puedes tener hasta 6 categorías grandes. Saca una antes de crear otra.</p>';
   cats.forEach(function(c,i){
-    h+='<details class="catg" data-plegable="categoria-'+esc(c.nombre)+'"><summary>'+esc(c.nombre)
+    h+='<details class="catg" data-plegable="categoria-'+esc(c.nombre)+'" data-org-cat="'+esc(c.nombre)+'"><summary draggable="true" data-arr-cat="'+esc(c.nombre)+'">'+esc(c.nombre)
       +' <span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span></summary><div class="catg-h">'
       +'<span class="mover">'
       +'<button class="fl" data-subir="'+esc(c.nombre)+'"'+(i===0?' disabled title="Ya está primera"':' title="Subir"')+'>▲</button>'
@@ -1489,9 +1668,11 @@ function verCategorias(){
       +'<button class="bx" data-borcat="'+esc(c.nombre)+'" title="Sacar esta categoría">✕</button>'
       +'</div>';
     if(!c.subs.length) h+='<p class="sub" style="margin:6px 0 0">Sin subcategorías todavía.</p>';
-    c.subs.forEach(function(s){
-      h+='<div class="arch"><span class="an">'+esc(s.nombre)
+    c.subs.forEach(function(s,j){
+      h+='<div class="arch" draggable="true" data-arr-sub="'+esc(s.nombre)+'" data-org-cat="'+esc(c.nombre)+'"><span class="an">'+esc(s.nombre)
         +' <span style="color:var(--tx3);font-size:11px">'+s.n.toLocaleString('es-CL')+'</span></span>'
+        +'<button class="fl" data-sub-flecha="-1" data-sub-nombre="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'"'+(j===0?' disabled':'')+' title="Subir">▲</button>'
+        +'<button class="fl" data-sub-flecha="1" data-sub-nombre="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'"'+(j===c.subs.length-1?' disabled':'')+' title="Bajar">▼</button>'
         +'<button class="bo" data-rensub="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'" title="Cambiarle el nombre">✎</button>'
         +'<button class="bx" data-borsub="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'" title="Sacar esta subcategoría">✕</button></div>';
     });
@@ -1527,7 +1708,7 @@ document.getElementById('reglasCont').addEventListener('click',function(e){
   api('/api/carpeta/desmarcar',{rel:q.dataset.quitaregla}).then(function(r){
     if(!r.ok){toast(r.error||'No pude quitar la regla.',true);return;}
     toast('Regla quitada');
-    cargar().then(function(){ verCategorias(); aplicar(); });
+    cargar().then(function(){ verCategorias(); });
   });
 });
 document.getElementById('catsCont').addEventListener('click',function(e){
@@ -1539,6 +1720,15 @@ document.getElementById('catsCont').addEventListener('click',function(e){
 
   var listaCats=function(){return (D.categorias||[]).map(function(c){return c.nombre})};
 
+  var sf=e.target.closest('[data-sub-flecha]');
+  if(sf){
+    var grupo=(D.categorias||[]).find(function(c){return c.nombre===sf.dataset.cat});
+    var orden=grupo.subs.map(function(s){return s.nombre}), i=orden.indexOf(sf.dataset.subNombre), j=i+Number(sf.dataset.subFlecha);
+    if(j<0||j>=orden.length) return;
+    var nombre=orden[i]; orden[i]=orden[j]; orden[j]=nombre;
+    api('/api/subcategoria/ordenar',{categoria:grupo.nombre,orden:orden}).then(refrescar(MENSAJE_ORDEN));
+    return;
+  }
   // crear una categoria grande
   if(e.target.id==='catNueva'){
     var nom=prompt('Nombre de la categoría nueva:');
@@ -1567,7 +1757,7 @@ document.getElementById('catsCont').addEventListener('click',function(e){
     var j=su?i-1:i+1;
     if(i<0||j<0||j>=cs.length) return;
     cs[i]=cs[j]; cs[j]=nom;
-    api('/api/categoria/ordenar',{orden:cs}).then(refrescar('Orden guardado'));
+    api('/api/categoria/ordenar',{orden:cs}).then(refrescar(MENSAJE_ORDEN));
     return;
   }
   // renombrar categoria grande
