@@ -322,6 +322,19 @@
   ::-webkit-scrollbar{width:11px;height:11px}
   ::-webkit-scrollbar-track{background:var(--bg)}
   ::-webkit-scrollbar-thumb{background:#3A332A;border-radius:6px;border:2px solid var(--bg)}
+  details[data-plegable]{margin-bottom:12px}
+  details[data-plegable]>summary{min-height:44px;padding:10px 12px;cursor:pointer;font-weight:700;border-radius:9px;background:var(--panel2);line-height:24px}
+  details[data-plegable]>summary::marker{font-size:1.1em;color:var(--amb2)}
+  details[data-plegable]>summary:focus-visible{outline:2px solid var(--amb2);outline-offset:2px}
+  .categoria-activa{font-weight:400;color:var(--tx2);font-size:.9rem;display:inline-block;max-width:65%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+  #catsCont button,#reglasCont button,.fil .fb,.subs .sb,.barra .btn{min-height:44px;min-width:44px}
+  #catsCont .catg-h{flex-wrap:wrap;padding:10px 0}
+  #catsCont .bo,#catsCont .bx,#catsCont .fl,#reglasCont .bx{height:44px;width:44px}
+  #catsCont .arch{min-height:44px}
+  .aviso-orden{padding:14px;border:1px solid var(--amb2);border-radius:9px;line-height:1.6}
+  #respaldosCont .arch{gap:12px;align-items:center;flex-wrap:wrap}
+  #respaldosCont .btn{min-height:44px}
+  button:disabled{cursor:default;opacity:.5}
 </style>
 </head>
 <body>
@@ -353,7 +366,7 @@
 <div class="cuerpo">
   <aside class="lado" id="lado">
     <button class="limpiar-todo arriba" id="limpiarTodo">✕ Quitar todos los filtros</button>
-    <h3>Qué incluye</h3>
+    <details data-plegable="incluye" open><summary>Qué incluye</summary>
     <div class="fil" id="filFlags">
       <button class="fb" data-flag="img">Con foto</button>
       <button class="fb" data-flag="man">Con manual</button>
@@ -361,8 +374,9 @@
       <button class="fb" data-flag="d3">3D</button>
       <button class="fb" data-flag="stock">Con stock</button>
     </div>
-    <h3>Formato</h3><div class="fil" id="filFmt"></div>
-    <h3>Grosor</h3><div class="fil" id="filGrosor"></div>
+    </details>
+    <details data-plegable="formato" open><summary>Formato</summary><div class="fil" id="filFmt"></div></details>
+    <details data-plegable="grosor" open><summary>Grosor</summary><div class="fil" id="filGrosor"></div></details>
   </aside>
 
   <main class="main" id="main">
@@ -370,8 +384,11 @@
 
     <!-- BIBLIOTECA / FAVORITOS -->
     <div class="vista on" id="v-biblio">
-      <div class="cats" id="cats"></div>
-      <div class="subs" id="subs"></div>
+      <details data-plegable="categorias-biblioteca" open>
+        <summary>Categorías <span id="categoriaActiva" class="categoria-activa"></span></summary>
+        <div class="cats" id="cats"></div>
+        <div class="subs" id="subs"></div>
+      </details>
       <div class="activos" id="activos"></div>
       <div class="grid" id="grid"></div>
       <div class="vacio" id="vacio" style="display:none">No hay modelos con esos filtros.</div>
@@ -436,11 +453,11 @@
 
       <div class="caja ajsec" data-sec="categorias">
         <h4>Categorías y subcategorías</h4>
-        <p class="sub">Crea, renombra, ordena (▲▼) o saca categorías y subcategorías.
-        Los modelos se mueven solos; en el disco no se toca nada.</p>
+        <p class="sub aviso-orden">Aquí solo cambias cómo se ordenan los modelos en la app. Tus archivos y carpetas del disco nunca se mueven ni se borran. Antes de cada cambio se guarda una copia: si algo no te gusta, ve a Respaldo y vuelve a como estaba.</p>
         <div id="catsCont"></div>
-        <h4 style="font-size:.95rem;margin:18px 0 8px">Carpetas con categoría fija</h4>
-        <div id="reglasCont"></div>
+        <details data-plegable="carpetas-fijas"><summary>Carpetas con categoría fija</summary>
+          <div id="reglasCont"></div>
+        </details>
       </div>
 
       <div class="caja ajsec" data-sec="programas">
@@ -467,6 +484,17 @@
           <input type="file" id="fileImportar" accept="application/json" style="display:none">
         </div>
         <p class="sub" style="margin:0">Al cargar un respaldo se agrega lo que falte, sin borrar lo que ya tienes.</p>
+        <h4 style="margin-top:24px">Volver a como estaba</h4>
+        <p class="sub">Se guarda una copia al abrir cada día y antes de cambiar el orden. Al volver, también se guarda cómo está ahora, por si quieres deshacerlo. Estas copias guardan tus datos de la app; los dibujos y carpetas del disco se recuperan desde Papelera o Historial.</p>
+        <p class="sub">Se conservan las últimas 30 copias del día y las últimas 30 antes de cambios.</p>
+        <div id="avisoRespaldo" role="status"></div>
+        <div id="respaldosCont"></div>
+        <h4 style="margin-top:24px">Otra copia en un pendrive u otro disco</h4>
+        <p class="sub" id="carpetaRespaldoTxt">No has elegido una carpeta externa.</p>
+        <div class="barra">
+          <button class="btn" id="btnCarpetaRespaldo">Elegir carpeta externa</button>
+          <button class="btn" id="btnQuitarCarpetaRespaldo">Dejar de copiar ahí</button>
+        </div>
       </div>
 
       <div class="caja ajsec" data-sec="carpetas">
@@ -562,15 +590,13 @@
   </div>
 </div>
 
-<!-- qué hacer con un archivo: abrirlo o convertirlo -->
+<!-- abrir un archivo con otro programa -->
 <div class="velo" id="veloProg">
   <div class="pop">
     <h3 id="progTit">Este archivo</h3>
     <div class="pop-secc">Abrir con</div>
     <div id="progOpc"></div>
     <label class="recordar"><input type="checkbox" id="progRec" checked> Usar siempre este programa para los archivos <b id="progExt"></b></label>
-    <div class="pop-secc">Convertir a</div>
-    <div id="convOpc"></div>
     <div class="pop-pie"><button class="btn" id="progCerrar">Cerrar</button></div>
   </div>
 </div>
@@ -584,6 +610,19 @@ var filtrados=[], mostrados=0, LOTE=60, actual=null;
 var PROGS={};        // qué programa abre cada archivo del modelo abierto
 var st={q:"",cat:"",sub:"",flags:{},fmt:"",gr:"",vista:"biblio",verOcultos:false};
 var qEl=document.getElementById('q'), grid=document.getElementById('grid');
+
+function prepararPlegables(contenedor){
+  (contenedor||document).querySelectorAll('details[data-plegable]').forEach(function(seccion){
+    if(seccion._lista) return;
+    seccion._lista=true;
+    var clave='plegado_v22_'+seccion.dataset.plegable;
+    try{ var valor=localStorage.getItem(clave); if(valor!==null) seccion.open=valor==='abierto'; }catch(e){}
+    seccion.addEventListener('toggle',function(){
+      try{ localStorage.setItem(clave,seccion.open?'abierto':'cerrado'); }catch(e){}
+    });
+  });
+}
+prepararPlegables();
 
 // ---------------- tema claro / oscuro ----------------
 function aplicarTema(t){
@@ -611,6 +650,7 @@ function cargar(){
     D=d; MODELOS=d.modelos; CLIENTES=d.clientes||[];
     document.getElementById('cargando').style.display='none';
     filtrosLaterales(); pintarCategorias(); aplicar(); actualizarPills();
+    if(d.aviso_respaldo) toast(d.aviso_respaldo,true);
   });
 }
 cargar().catch(function(){document.getElementById('cargando').textContent='Error al cargar.'});
@@ -643,6 +683,7 @@ function pintarCategorias(){
 }
 function pintarSubs(){
   var cont=document.getElementById('subs');
+  document.getElementById('categoriaActiva').textContent=st.cat ? ' · '+st.cat+(st.sub?' › '+st.sub:'') : '';
   if(!st.cat){ cont.innerHTML=''; return; }
   var g=(D.categorias||[]).find(function(c){return c.nombre===st.cat});
   cont.innerHTML = (g&&g.subs.length)
@@ -817,27 +858,19 @@ function abrirModelo(rel){
     var corte=m.archivos.corte||[], lb=corte.filter(function(f){return /\.lbrn2?$/i.test(f)});
     PROGS=m.programas||{};
     var pri=lb[0]||corte[0], a=[];
-    // Los dos botones grandes. Cada programa recibe el formato que le sirve:
-    // CorelDRAW un SVG y LightBurn un .lbrn. Si el modelo no lo tiene,
-    // se convierte solo al apretar.
+    // Los dos botones abren el archivo existente que indica su nombre.
     var ae=m.abrir_en||{};
     [['lightburn','Abrir en LightBurn','🔥','pri'],
      ['corel','Abrir en CorelDRAW','🎨','']].forEach(function(x){
       var k=x[0], info=ae[k]||{};
-      if(!corte.length){
-        a.push('<button class="acc vacio" data-falta="modelo"><span class="em">'+x[2]+'</span>'
-          +'<span>Sin archivo para cortar<small>No se encontró · toca para agregar uno</small></span></button>');
-        return;
-      }
       if(!info.puede){
-        a.push('<button class="acc vacio" title="'+esc(info.motivo||'')+'"><span class="em">'+x[2]+'</span>'
+        a.push('<button class="acc vacio" disabled title="'+esc(info.motivo||'')+'"><span class="em">'+x[2]+'</span>'
           +'<span>'+esc(x[1])+'<small>'+esc(info.motivo||'No se puede con este modelo')+'</small></span></button>');
         return;
       }
-      var pie = info.convierte ? ('Se convierte solo desde .'+esc(info.desde))
-                               : (k==='lightburn'?'Ya tiene el archivo listo':'Ya tiene el SVG listo');
-      if(!info.instalado) pie += ' · no encuentro el programa';
-      a.push('<button class="acc '+x[3]+'" data-abrir-en="'+k+'"><span class="em">'+x[2]+'</span>'
+      var pie = esc(info.archivo);
+      if(!info.instalado) pie += ' · No encuentro '+(k==='corel'?'CorelDRAW':'LightBurn')+'. Indica dónde está en Ajustes → Programas.';
+      a.push('<button class="acc '+x[3]+'" data-abrir-en="'+k+'"'+(!info.instalado?' disabled':'')+'><span class="em">'+x[2]+'</span>'
         +'<span>'+esc(x[1])+'<small>'+pie+'</small></span></button>');
     });
 
@@ -980,10 +1013,11 @@ document.getElementById('v-limpieza').addEventListener('click',function(e){
   }
   var mo=e.target.closest('[data-mostrar]');
   if(mo){ api('/api/ocultar',{rel:mo.dataset.mostrar}).then(function(r){
+      if(!r.ok){toast(r.error||'No pude volver a mostrarlo.',true);return;}
       toast('Vuelve a estar visible'); verOcultos(); cargar().then(function(){aplicar()}) }); return; }
   var re=e.target.closest('[data-restaurar]');
   if(re){ api('/api/papelera/restaurar',{id:+re.dataset.restaurar}).then(function(r){
-      if(r.ok){ toast('Recuperado'); verPapelera(); if(r.tipo==='modelo') api('/api/reindexar').then(function(){cargar()}); else cargar(); }
+      if(r.ok){ toast('Recuperado'); verPapelera(); if(r.tipo==='modelo') api('/api/reindexar',{}).then(function(x){if(x.ok)cargar();else toast(x.error||'No pude releer los modelos',true)}); else cargar(); }
       else toast(r.error||'No se pudo',true) }); return; }
   if(e.target.id==='vaciarPap'){
     if(!confirm('¿Vaciar la papelera?\n\nEsto SÍ borra los archivos para siempre y no se puede deshacer.')) return;
@@ -1040,7 +1074,7 @@ document.getElementById('velo').addEventListener('click',function(e){
       ab.disabled=false;
       if(txt) txt.textContent=antes;
       if(r.ok){
-        toast((r.convertido?'Convertido y abriendo en ':'Abriendo en ')+r.con+'...');
+        toast('Abriendo '+r.archivo+' en '+r.con+'...');
       } else toast(r.error||'No se pudo', true);
     });
     return;
@@ -1078,29 +1112,7 @@ function elegirOtroPrograma(f){
     document.getElementById('veloProg').dataset.f=f;
     document.getElementById('veloProg').dataset.ext=ext;
   });
-  // qué se puede convertir
-  document.getElementById('convOpc').innerHTML='<p class="nota">Viendo...</p>';
-  api('/api/convertir/opciones?f='+encodeURIComponent(f)).then(function(c){
-    var cont=document.getElementById('convOpc');
-    if(!c.formatos.length){ cont.innerHTML='<p class="nota">'+esc(c.motivo||'No se puede convertir.')+'</p>'; return; }
-    var necesita = /^\.(svg|pdf|dxf|eps|ps|emf|wmf|ai)$/.test(ext) && !c.inkscape;
-    cont.innerHTML='<div class="fmts">'+c.formatos.map(function(x){
-      return '<button class="fmt" data-conv="'+esc(x)+'"'+(necesita?' disabled':'')+'>'+esc(x)+'</button>'}).join('')+'</div>'
-      +(necesita?'<p class="nota" style="margin-top:9px">Para estos archivos hace falta <b>Inkscape</b>, que es gratis (inkscape.org). Instálalo y aparecerán activos.</p>'
-       : ext==='.lbrn'||ext==='.lbrn2' ? '<p class="nota" style="margin-top:9px">De LightBurn se saca la imagen de vista previa que trae adentro. El dibujo en sí solo lo exporta LightBurn.</p>'
-       : '<p class="nota" style="margin-top:9px">El archivo nuevo se guarda en la misma carpeta del modelo.</p>');
-  });
 }
-document.getElementById('convOpc').addEventListener('click',function(e){
-  var b=e.target.closest('[data-conv]'); if(!b||!actual) return;
-  var vp=document.getElementById('veloProg'), f=vp.dataset.f;
-  b.disabled=true; b.textContent='...';
-  api('/api/convertir',{p:actual.ruta+'\\'+f,formato:b.dataset.conv,rel:actual.rel}).then(function(r){
-    vp.classList.remove('on');
-    if(r.ok){ toast('Listo: '+r.archivo.split('\\').pop()); abrirModelo(actual.rel); }
-    else toast(r.error||'No se pudo', true);
-  });
-});
 document.getElementById('progOpc').addEventListener('click',function(e){
   var b=e.target.closest('[data-clave]'); if(!b) return;
   var vp=document.getElementById('veloProg'), f=vp.dataset.f, ext=vp.dataset.ext, clave=b.dataset.clave;
@@ -1372,14 +1384,14 @@ function verPanel(){
 function kpi(l,v,c){return '<div class="kpi '+(c||'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div></div>'}
 
 // ---------------- ajustes ----------------
-function verAjustes(){
+function verAjustes(mensajeRespaldo){
   api('/api/version').then(function(v){
     document.getElementById('verTxt').innerHTML='Tienes la versión <b style="color:var(--amb2)">'
       + esc(v.version)+(v.nombre?' — '+esc(v.nombre):'')+'</b>';
   });
   document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
     +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
-  verCostos(); verProgramas(); verCategorias(); verCarpetas();
+  verCostos(); verProgramas(); verCategorias(); verCarpetas(); verRespaldos(mensajeRespaldo);
   var guardada='carpetas';
   try{ guardada=localStorage.getItem('ajustes_seccion')||'carpetas'; }catch(e){}
   verSeccionAjustes(guardada);
@@ -1460,15 +1472,16 @@ document.getElementById('carpetasCont').addEventListener('click',function(e){
 function verCategorias(){
   var cats=D.categorias||[], h='';
   h+='<div class="barra" style="margin-bottom:12px">'
-    +'<button class="btn pri" id="catNueva">+ Categoría nueva</button>'
+    +'<button class="btn pri" id="catNueva"'+(cats.length>=6?' disabled title="Ya tienes 6 categorías. Saca una antes de crear otra."':'')+'>+ Categoría nueva</button>'
     +'<button class="btn" id="catCarpeta">📁 Una carpeta entera a una categoría</button></div>';
+  if(cats.length>=6) h+='<p class="sub">Puedes tener hasta 6 categorías grandes. Saca una antes de crear otra.</p>';
   cats.forEach(function(c,i){
-    h+='<div class="catg"><div class="catg-h">'
+    h+='<details class="catg" data-plegable="categoria-'+esc(c.nombre)+'"><summary>'+esc(c.nombre)
+      +' <span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span></summary><div class="catg-h">'
       +'<span class="mover">'
-      +'<button class="fl" data-subir="'+esc(c.nombre)+'"'+(i===0?' disabled':'')+' title="Subir">▲</button>'
-      +'<button class="fl" data-bajar="'+esc(c.nombre)+'"'+(i===cats.length-1?' disabled':'')+' title="Bajar">▼</button>'
+      +'<button class="fl" data-subir="'+esc(c.nombre)+'"'+(i===0?' disabled title="Ya está primera"':' title="Subir"')+'>▲</button>'
+      +'<button class="fl" data-bajar="'+esc(c.nombre)+'"'+(i===cats.length-1?' disabled title="Ya está última"':' title="Bajar"')+'>▼</button>'
       +'</span>'
-      +'<b>'+esc(c.nombre)+'</b>'
       +(c.propia?'<span class="mia">tuya</span>':'')
       +'<span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span>'
       +'<button class="btn mini" data-nuevasub="'+esc(c.nombre)+'">+ Subcategoría</button>'
@@ -1482,9 +1495,10 @@ function verCategorias(){
         +'<button class="bo" data-rensub="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'" title="Cambiarle el nombre">✎</button>'
         +'<button class="bx" data-borsub="'+esc(s.nombre)+'" data-cat="'+esc(c.nombre)+'" title="Sacar esta subcategoría">✕</button></div>';
     });
-    h+='</div>';
+    h+='</details>';
   });
   document.getElementById('catsCont').innerHTML=h;
+  prepararPlegables(document.getElementById('catsCont'));
   verReglas();
 }
 
@@ -1510,7 +1524,8 @@ document.getElementById('reglasCont').addEventListener('click',function(e){
   var q=e.target.closest('[data-quitaregla]'); if(!q) return;
   if(!confirm('¿Quitar la regla de "'+q.dataset.quitaregla+'"?\n\n'
     +'Sus modelos vuelven a ordenarse solos. No se borra ningún archivo.')) return;
-  api('/api/carpeta/desmarcar',{rel:q.dataset.quitaregla}).then(function(){
+  api('/api/carpeta/desmarcar',{rel:q.dataset.quitaregla}).then(function(r){
+    if(!r.ok){toast(r.error||'No pude quitar la regla.',true);return;}
     toast('Regla quitada');
     cargar().then(function(){ verCategorias(); aplicar(); });
   });
@@ -1748,6 +1763,50 @@ document.getElementById('btnRevisar').onclick=function(){
     };
   });
 };
+function verRespaldos(mensaje){
+  return api('/api/respaldos').then(function(r){
+    document.getElementById('avisoRespaldo').textContent=mensaje||r.aviso||'';
+    document.getElementById('carpetaRespaldoTxt').textContent=r.carpeta_externa||'No has elegido una carpeta externa.';
+    var quitar=document.getElementById('btnQuitarCarpetaRespaldo');
+    quitar.disabled=!r.carpeta_externa;
+    quitar.title=r.carpeta_externa?'Dejar de guardar la copia del día en esta carpeta':'Primero elige una carpeta externa.';
+    document.getElementById('respaldosCont').innerHTML=(r.items||[]).map(function(x){
+      return '<div class="arch"><span class="an" style="white-space:normal"><b>'
+        +esc(new Date(x.fecha).toLocaleString('es-CL'))+'</b><br>'+esc(x.descripcion)+'</span>'
+        +'<button class="btn" data-volver="'+esc(x.archivo)+'">Volver</button></div>';
+    }).join('')||'<p class="sub">Todavía no hay copias automáticas. Se guarda una al abrir la app y antes de cambiar el orden.</p>';
+  }).catch(function(){document.getElementById('avisoRespaldo').textContent='No pude mostrar las copias. Vuelve a entrar a Respaldo.'});
+}
+document.getElementById('respaldosCont').addEventListener('click',function(e){
+  var b=e.target.closest('[data-volver]'); if(!b||b.disabled) return;
+  if(!confirm('¿Volver a esta copia?\n\nLos datos de la app quedarán como estaban en esa fecha. Primero guardaremos cómo está ahora, para que puedas deshacerlo. Tus archivos del disco no se cambian.')) return;
+  b.disabled=true; b.textContent='Volviendo...';
+  api('/api/respaldos/volver',{archivo:b.dataset.volver}).then(function(r){
+    if(!r.ok) throw new Error(r.error||'No pude volver a esa copia.');
+    actual=null; document.getElementById('velo').classList.remove('on');
+    st.cat=''; st.sub='';
+    return cargar().then(function(){
+      verAjustes(r.aviso);
+      toast(r.aviso);
+    });
+  }).catch(function(err){b.disabled=false;b.textContent='Volver';toast(err.message||'No pude volver a esa copia.',true)});
+});
+document.getElementById('btnCarpetaRespaldo').onclick=function(){
+  var b=this;b.disabled=true;
+  toast('Elige una carpeta del pendrive u otro disco...');
+  api('/api/respaldos/carpeta',{}).then(function(r){
+    if(!r.ok) toast(r.error||'No pude elegir la carpeta.',true);
+    else if(r.aviso) toast(r.aviso,true);
+    else toast('Listo, la copia del día también está en la carpeta elegida.');
+    verRespaldos();
+  }).catch(function(){toast('No pude elegir la carpeta.',true)}).finally(function(){b.disabled=false});
+};
+document.getElementById('btnQuitarCarpetaRespaldo').onclick=function(){
+  api('/api/respaldos/carpeta',{quitar:true}).then(function(r){
+    if(r.ok){toast('La copia seguirá guardándose en este computador.');verRespaldos()}
+    else toast(r.error||'No pude cambiar la carpeta.',true);
+  });
+};
 document.getElementById('btnExportar').onclick=function(){ window.location='/api/datos/exportar'; toast('Descargando respaldo...') };
 document.getElementById('btnImportar').onclick=function(){ document.getElementById('fileImportar').click() };
 document.getElementById('fileImportar').onchange=function(){
@@ -1757,7 +1816,7 @@ document.getElementById('fileImportar').onchange=function(){
     var datos; try{ datos=JSON.parse(lector.result) }catch(e){ return toast('El archivo no es un respaldo válido',true) }
     api('/api/datos/importar',{datos:datos,modo:'fusionar'}).then(function(r){
       if(r.ok){ var n=r.importado; toast('Cargado: '+n.modelos+' modelos, '+n.clientes+' clientes, '+n.ventas+' ventas');
-        cargar().then(function(){aplicar()}); }
+        cargar().then(function(){verAjustes();aplicar()}); }
       else toast(r.error||'No se pudo cargar',true);
     });
   };

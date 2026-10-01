@@ -10,7 +10,11 @@ Servidor en 127.0.0.1 que sirve la biblioteca en el navegador y permite:
   - ventas de feria y panel de métricas
 """
 import os, sys, json, re, threading, webbrowser, subprocess, urllib.parse, mimetypes, hashlib, shutil, time
-import base64, io          # los usa el conversor (miniaturas de LightBurn)
+import base64, io          # miniaturas de LightBurn
+import sqlite3, uuid
+from datetime import datetime
+from functools import wraps
+from contextlib import closing
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import db
@@ -18,14 +22,14 @@ import formatos
 
 CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
 
-APP_VERSION = "2.1"
-APP_NOMBRE = "Mas comodo"   # nombre corto de esta versión, para reconocerla
+APP_VERSION = "2.2"
+APP_NOMBRE = "Ordenado y tranquilo"
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
 WHATSAPP_SOPORTE = "56954703465"
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = os.environ.get("BIBLIOTECA_LASER_BASE") or os.path.dirname(os.path.abspath(__file__))
 INDICE = os.path.join(BASE, "biblioteca.json")
 CONFIG = os.path.join(BASE, "config.json")
 CACHE_THUMBS = os.path.join(BASE, ".miniaturas")
@@ -250,7 +254,7 @@ def raices():
 
 def ruta_segura(p):
     """Solo se puede tocar lo que este dentro de alguna carpeta de modelos
-    (o de la carpeta del programa, para los archivos convertidos)."""
+    o de la carpeta del programa."""
     try:
         p = os.path.abspath(p)
     except Exception:
@@ -264,6 +268,10 @@ def ruta_segura(p):
         except Exception:
             continue
     return False
+
+
+def es_convertidos(ruta):
+    return "_convertidos" in os.path.realpath(ruta).replace("\\", "/").lower().split("/")
 
 
 # ---------------------------------------------------------------- vista de modelos
@@ -412,6 +420,22 @@ def categorias_con_conteo(vistas):
     return salida
 
 
+def cambio_organizacion(descripcion):
+    """El respaldo y el cambio se hacen juntos, sin otras solicitudes entremedio."""
+    def decorar(funcion):
+        @wraps(funcion)
+        def protegida(*args, **kwargs):
+            with db.LOCK:
+                texto = descripcion(*args, **kwargs) if callable(descripcion) else descripcion
+                copia = respaldar_base(texto)
+                if not copia.get("ok"):
+                    return copia
+                return funcion(*args, **kwargs)
+        return protegida
+    return decorar
+
+
+@cambio_organizacion(lambda nombre: "Antes de crear la categoría " + str(nombre))
 def crear_categoria(nombre):
     nombre = (nombre or "").strip()
     if not nombre:
@@ -421,10 +445,13 @@ def crear_categoria(nombre):
     actuales = [g["nombre"] for g in categorias_con_conteo(vistas_todas())]
     if nombre in actuales:
         return {"error": "Ya existe una categoría con ese nombre."}
+    if len(actuales) >= 6:
+        return {"error": "Puedes tener hasta 6 categorías grandes. Saca una antes de crear otra."}
     db.guardar_cat(nombre, orden=len(actuales), propia=True, oculta=False)
     return {"ok": True, "nombre": nombre}
 
 
+@cambio_organizacion(lambda nombre, destino="": "Antes de sacar la categoría " + str(nombre))
 def borrar_categoria(nombre, destino=""):
     """Saca una categoría grande. Sus modelos pasan a `destino`, o vuelven a
     donde los pondría el programa solo. Nunca se borra nada del disco."""
@@ -434,8 +461,6 @@ def borrar_categoria(nombre, destino=""):
         return {"error": "falta la categoría"}
     vistas = vistas_todas()
     afectados = [v for v in vistas if v["c"] == nombre]
-    if len(afectados) > 20:
-        respaldar_base()
     for v in afectados:
         if destino:
             db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": ""})
@@ -455,6 +480,7 @@ def borrar_categoria(nombre, destino=""):
     return {"ok": True, "movidos": len(afectados), "destino": destino}
 
 
+@cambio_organizacion(lambda viejo, nuevo: "Antes de renombrar la categoría " + str(viejo))
 def renombrar_categoria(viejo, nuevo):
     viejo, nuevo = (viejo or "").strip(), (nuevo or "").strip()
     if not viejo or not nuevo:
@@ -463,8 +489,6 @@ def renombrar_categoria(viejo, nuevo):
         return {"ok": True, "movidos": 0}
     vistas = vistas_todas()
     afectados = [v for v in vistas if v["c"] == viejo]
-    if len(afectados) > 20:
-        respaldar_base()
     for v in afectados:
         db.guardar_meta(v["rel"], {"categoria": nuevo})
     for r in db.reglas_carpeta():
@@ -486,6 +510,7 @@ def vistas_todas():
     return [modelo_vista(m, metas) for m in MODELOS]
 
 
+@cambio_organizacion(lambda ruta, categoria, subcategoria="": "Antes de cambiar la categoría fija de la carpeta " + str(ruta))
 def marcar_carpeta(ruta, categoria, subcategoria=""):
     """Deja una carpeta entera dentro de una categoría."""
     categoria = (categoria or "").strip()
@@ -573,7 +598,7 @@ def hacer_principal(rel, nombre):
     corte = m["archivos"]["corte"]
     ext = os.path.splitext(nombre)[1].lower()
     if ext not in [e.lower() for e in
-                   (".svg", ".dxf", ".eps", ".ai", ".cdr", ".cmx", ".lbrn", ".lbrn2", ".plt", ".dwg")]:
+                   (".svg", ".dxf", ".eps", ".ai", ".cdr", ".cmx", ".lbrn", ".lbrn2", ".plt", ".dwg", ".pdf")]:
         return {"error": "ese archivo no es un dibujo para cortar"}
 
     # que quede primero en la lista: asi lo toma todo lo demas
@@ -624,6 +649,7 @@ def modelos_en(cat, sub):
             if v["c"] == cat and (v["s"] or "") == (sub or "")]
 
 
+@cambio_organizacion(lambda cat, vieja, nueva: "Antes de renombrar la subcategoría " + str(vieja))
 def renombrar_subcat(cat, vieja, nueva):
     """Le cambia el nombre a una subcategoría y arrastra sus modelos."""
     cat, vieja, nueva = (cat or "").strip(), (vieja or "").strip(), (nueva or "").strip()
@@ -634,8 +660,6 @@ def renombrar_subcat(cat, vieja, nueva):
     if nueva == vieja:
         return {"ok": True, "movidos": 0}
     afectados = modelos_en(cat, vieja)
-    if len(afectados) > 20:
-        respaldar_base()      # por si se arrepiente después
     for v in afectados:
         db.guardar_meta(v["rel"], {"categoria": cat, "subcategoria": nueva})
     db.quitar_subcat(cat, vieja)
@@ -646,6 +670,7 @@ def renombrar_subcat(cat, vieja, nueva):
     return {"ok": True, "movidos": len(afectados)}
 
 
+@cambio_organizacion(lambda cat, sub, destino="": "Antes de sacar la subcategoría " + str(sub))
 def borrar_subcat(cat, sub, destino=""):
     """Saca una subcategoría. Sus modelos pasan a `destino` (o quedan sin subcategoría);
     nunca se borra nada del disco."""
@@ -654,8 +679,6 @@ def borrar_subcat(cat, sub, destino=""):
         return {"error": "falta la subcategoría"}
     destino = (destino or "").strip()
     afectados = modelos_en(cat, sub)
-    if len(afectados) > 20:
-        respaldar_base()      # por si se arrepiente después
     for v in afectados:
         db.guardar_meta(v["rel"], {"categoria": cat, "subcategoria": destino})
     db.quitar_subcat(cat, sub)
@@ -664,6 +687,46 @@ def borrar_subcat(cat, sub, destino=""):
     if _la_pone_el_programa(cat, sub):
         db.ocultar_subcat(cat, sub, 1)
     return {"ok": True, "movidos": len(afectados), "destino": destino}
+
+
+@cambio_organizacion("Antes de ordenar las categorías")
+def ordenar_categorias(nombres):
+    db.ordenar_cats(nombres)
+    return {"ok": True}
+
+
+@cambio_organizacion(lambda cat, nombre: "Antes de crear la subcategoría " + str(nombre))
+def crear_subcategoria(cat, nombre):
+    db.crear_subcat(cat, nombre)
+    return {"ok": True, "categoria": cat, "nombre": nombre}
+
+
+@cambio_organizacion(lambda rel: "Antes de quitar la categoría fija de la carpeta " + str(rel))
+def quitar_regla(rel):
+    db.borrar_regla(rel)
+    recargar_reglas()
+    return {"ok": True}
+
+
+@cambio_organizacion(lambda rel: "Antes de ocultar o volver a mostrar el modelo " + str(rel))
+def alternar_modelo_oculto(rel):
+    return {"ok": True, "oculto": db.alternar_oculto(rel)}
+
+
+@db.exclusivo
+def guardar_edicion(rel, campos):
+    viejo = db.meta(rel) or {}
+    if any(k in campos and campos[k] != viejo.get(k) for k in ("categoria", "subcategoria", "oculto")):
+        res = respaldar_base("Antes de cambiar la categoría o visibilidad del modelo " + str(rel))
+        if not res.get("ok"):
+            return res
+    db.guardar_meta(rel, campos)
+    return {"ok": True, "meta": db.meta(rel)}
+
+
+def archivo_para_programa(m, programa, principal=""):
+    archivos = [a for grupo in m["archivos"].values() for a in grupo]
+    return formatos.elegir_archivo(m["ruta"], archivos, programa, principal)
 
 
 def vista_previa_lightburn(m):
@@ -729,48 +792,11 @@ def miniatura(rel):
 
 
 
-# =========================================================================
-#  CONVERSOR DE ARCHIVOS
-#  Vive aquí adentro y no en un archivo aparte a propósito: al actualizar,
-#  las versiones viejas de la app solo reemplazan los archivos que ya
-#  conocen. Un archivo NUEVO no les llega (paso con convertir.py en la 1.4
-#  y el papá se quedo sin conversor). Metido en app.py, siempre llega.
-# =========================================================================
-IMAGENES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
-VECTORES = {".svg", ".pdf", ".dxf", ".eps", ".ps", ".emf", ".wmf", ".ai"}
-LIGHTBURN = {".lbrn", ".lbrn2"}
-COREL = {".cdr", ".cmx"}
-
-SALIDA_IMAGEN = ["png", "jpg", "webp", "bmp", "pdf"]
-SALIDA_VECTOR = ["svg", "pdf", "dxf", "png", "eps"]
-
-_RX_THUMB = re.compile(rb'<Thumbnail\s+Source="([^"]+)"')
-
-
-def formatos_destino(archivo):
-    """A qué formatos se puede llevar este archivo."""
-    ext = os.path.splitext(archivo)[1].lower()
-    if ext in LIGHTBURN:
-        return ["png"]           # solo la miniatura que trae adentro
-    if ext in IMAGENES:
-        return [f for f in SALIDA_IMAGEN if f != ext.lstrip(".")]
-    if ext in VECTORES:
-        return [f for f in SALIDA_VECTOR if f != ext.lstrip(".")]
-    return []
-
-
-def por_que_no(archivo):
-    """Si no se puede convertir, explicar por qué en cristiano."""
-    ext = os.path.splitext(archivo)[1].lower()
-    if ext in COREL:
-        return ("Los archivos %s son formato cerrado de CorelDRAW: solo CorelDRAW "
-                "puede abrirlos. Ábrelo ahí y usa Archivo → Exportar." % ext)
-    if not formatos_destino(archivo):
-        return "Todavía no sé convertir archivos %s." % (ext or "sin extensión")
-    return ""
 
 
 # ------------------------------------------------------------------ LightBurn
+_RX_THUMB = re.compile(rb'<Thumbnail\s+Source="([^"]+)"')
+
 def miniatura_lightburn(origen, destino):
     """Saca la miniatura PNG que LightBurn guarda dentro del archivo."""
     try:
@@ -794,83 +820,6 @@ def miniatura_lightburn(origen, destino):
     return {"ok": True, "archivo": destino, "con": "la miniatura de LightBurn"}
 
 
-# --------------------------------------------------------------------- fotos
-def convertir_imagen(origen, destino):
-    try:
-        from PIL import Image
-        img = Image.open(origen)
-        img.load()
-        # jpg y pdf no soportan transparencia: la aplanamos sobre blanco
-        if destino.lower().endswith((".jpg", ".jpeg", ".pdf")) and img.mode in ("RGBA", "LA", "P"):
-            fondo = Image.new("RGB", img.size, (255, 255, 255))
-            img = img.convert("RGBA")
-            fondo.paste(img, mask=img.split()[-1])
-            img = fondo
-        img.save(destino)
-    except Exception as e:
-        return {"error": "No pude convertir la imagen: %s" % e}
-    return {"ok": True, "archivo": destino, "con": "Pillow"}
-
-
-# ------------------------------------------------------------------ vectores
-def convertir_vector(origen, destino, inkscape):
-    if not inkscape:
-        return {"error": "Para convertir dibujos vectoriales hace falta Inkscape "
-                         "(es gratis: inkscape.org). Instálalo y vuelve a intentar."}
-    ext = os.path.splitext(destino)[1].lower().lstrip(".")
-    cmd = [inkscape, origen, "--export-filename=" + destino]
-    if ext == "png":
-        cmd.append("--export-dpi=300")
-    if ext == "svg":
-        cmd.append("--export-plain-svg")
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180,
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except subprocess.TimeoutExpired:
-        return {"error": "Inkscape se demoró demasiado. Puede que el archivo sea muy pesado."}
-    except Exception as e:
-        return {"error": "No pude ejecutar Inkscape: %s" % e}
-
-    if not os.path.exists(destino) or os.path.getsize(destino) == 0:
-        detalle = (r.stderr or r.stdout or "").strip().splitlines()
-        return {"error": "Inkscape no logró convertirlo.",
-                "detalle": detalle[-1][:200] if detalle else ""}
-    return {"ok": True, "archivo": destino, "con": "Inkscape"}
-
-
-# -------------------------------------------------------------------- entrada
-def convertir_archivo(origen, formato, inkscape=None, carpeta_salida=None):
-    """Convierte `origen` al `formato` pedido. Nunca toca el archivo original."""
-    if not os.path.exists(origen):
-        return {"error": "No encuentro ese archivo."}
-    formato = (formato or "").strip().lower().lstrip(".")
-    if not formato.isalnum():
-        return {"error": "Formato no válido."}
-
-    ext = os.path.splitext(origen)[1].lower()
-    permitidos = formatos_destino(origen)
-    if not permitidos:
-        return {"error": por_que_no(origen)}
-    if formato not in permitidos:
-        return {"error": "De %s puedo pasar a: %s." % (ext, ", ".join(permitidos))}
-
-    carpeta = carpeta_salida or os.path.dirname(origen)
-    base = os.path.splitext(os.path.basename(origen))[0]
-    destino = os.path.join(carpeta, "%s.%s" % (base, formato))
-    # si ya existe uno con ese nombre, no lo pisamos
-    n = 2
-    while os.path.exists(destino):
-        destino = os.path.join(carpeta, "%s (%d).%s" % (base, n, formato))
-        n += 1
-
-    try:
-        if ext in LIGHTBURN:
-            return miniatura_lightburn(origen, destino)
-        if ext in IMAGENES:
-            return convertir_imagen(origen, destino)
-        return convertir_vector(origen, destino, inkscape)
-    except Exception as e:
-        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------- subir archivos
@@ -895,6 +844,8 @@ def guardar_archivo(rel, tipo, nombre, datos):
     if not m:
         return {"error": "modelo no encontrado"}
     carpeta = m["ruta"]
+    if es_convertidos(carpeta):
+        return {"error": "Los trabajos de _convertidos se conservan tal como están. Guarda el archivo en otra carpeta de modelos."}
     if not ruta_segura(carpeta):
         return {"error": "ruta no permitida"}
     nombre = os.path.basename(nombre).replace("\\", "").replace("/", "")
@@ -936,6 +887,8 @@ def borrar_archivo(rel, nombre):
     if not m:
         return {"error": "modelo no encontrado"}
     origen = os.path.join(m["ruta"], os.path.basename(nombre))
+    if es_convertidos(origen):
+        return {"error": "Los trabajos de _convertidos se conservan. No se quitaron archivos."}
     if not ruta_segura(origen) or not os.path.isfile(origen):
         return {"error": "archivo no encontrado"}
     destino = _destino_papelera(os.path.basename(nombre))
@@ -948,12 +901,15 @@ def borrar_archivo(rel, nombre):
     return {"ok": True}
 
 
+@cambio_organizacion(lambda rel: "Antes de quitar el modelo " + str(rel))
 def borrar_modelo(rel):
     """Manda la CARPETA completa del modelo a la papelera."""
     m = POR_REL.get(rel)
     if not m:
         return {"error": "modelo no encontrado"}
     origen = m["ruta"]
+    if es_convertidos(origen):
+        return {"error": "La carpeta _convertidos se conserva. No se quitó el modelo."}
     if not ruta_segura(origen) or not os.path.isdir(origen):
         return {"error": "carpeta no encontrada"}
     if os.path.abspath(origen) == os.path.abspath(RAIZ):
@@ -976,6 +932,8 @@ def restaurar_papelera(pid):
     it = db.item_papelera(pid)
     if not it:
         return {"error": "no está en la papelera"}
+    if es_convertidos(it["origen"]) or es_convertidos(it["destino"]):
+        return {"error": "Los trabajos de _convertidos se conservan tal como están."}
     if not os.path.exists(it["destino"]):
         return {"error": "el archivo ya no está en la papelera"}
     if os.path.exists(it["origen"]):
@@ -994,6 +952,8 @@ def restaurar_papelera(pid):
 def vaciar_papelera():
     n = 0
     for it in db.papelera():
+        if es_convertidos(it["destino"]):
+            continue
         try:
             if os.path.isdir(it["destino"]):
                 shutil.rmtree(it["destino"]); n += 1
@@ -1469,31 +1429,179 @@ def exportar_datos():
         "costos_fijos": db.filas("SELECT * FROM costos_fijos"),
         "ajustes": db.ajustes_todos(),
         "subcats": db.filas("SELECT * FROM subcats"),
+        "cats": db.filas("SELECT * FROM cats"),
+        "reglas_carpeta": db.reglas_carpeta(),
     }
 
 
-def respaldar_base():
-    """Copia segura de la base, aunque la app esté funcionando.
-    Copiar el archivo a mano NO sirve: SQLite deja cambios en biblioteca.db-wal
-    y la copia queda a medias."""
-    destino = os.path.join(BASE, "respaldos",
-                           "biblioteca-%s.db" % time.strftime("%Y%m%d-%H%M%S"))
-    os.makedirs(os.path.dirname(destino), exist_ok=True)
-    try:
-        db.cx().execute("VACUUM INTO ?", (destino,))
-    except Exception as e:
-        return {"error": str(e)}
-    # dejamos solo los 10 respaldos más nuevos
-    carpeta = os.path.dirname(destino)
-    viejos = sorted(f for f in os.listdir(carpeta) if f.endswith(".db"))
-    for f in viejos[:-10]:
+MARCA_RESPALDO = "biblioteca-laser-respaldo-v22"
+AVISO_RESPALDO = ""
+_NOMBRE_RESPALDO = re.compile(r"bl-v22-(diario|cambio)-[0-9]{8}-[0-9]{12}-[0-9a-f]{32}\.db$")
+
+
+def carpeta_respaldos():
+    return os.path.join(BASE, "respaldos")
+
+
+@db.exclusivo
+def listar_respaldos(carpeta=None):
+    carpeta = carpeta or carpeta_respaldos()
+    salida = []
+    if not os.path.isdir(carpeta):
+        return salida
+    for nombre in os.listdir(carpeta):
+        match = _NOMBRE_RESPALDO.fullmatch(nombre)
+        ruta = os.path.join(carpeta, nombre)
+        ficha = ruta + ".json"
+        if not match or not os.path.isfile(ruta) or os.path.islink(ruta) or os.path.islink(ficha):
+            continue
         try:
-            os.remove(os.path.join(carpeta, f))
-        except OSError:
-            pass
-    return {"ok": True, "archivo": destino}
+            with open(ficha, encoding="utf-8") as f:
+                dato = json.load(f)
+            if (dato.get("marca") != MARCA_RESPALDO or dato.get("archivo") != nombre
+                    or dato.get("tipo") != match.group(1)):
+                continue
+            datetime.fromisoformat(dato["fecha"])
+            salida.append(dato)
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return sorted(salida, key=lambda x: x["fecha"], reverse=True)
 
 
+def limitar_respaldos(carpeta=None):
+    carpeta = carpeta or carpeta_respaldos()
+    lista = listar_respaldos(carpeta)
+    for tipo in ("diario", "cambio"):
+        propios = [x for x in lista if x["tipo"] == tipo]
+        for viejo in propios[30:]:
+            ruta = os.path.join(carpeta, viejo["archivo"])
+            try:
+                os.remove(ruta)
+                os.remove(ruta + ".json")
+            except OSError:
+                pass
+
+
+@db.exclusivo
+def respaldar_base(descripcion="Antes de cambiar el orden de la biblioteca", tipo="cambio"):
+    """La API de SQLite incluye lo que aún vive en el WAL, sin copiar la base abierta."""
+    if tipo not in ("diario", "cambio"):
+        return {"error": "No pude guardar la copia. No se cambió tu biblioteca."}
+    ahora = datetime.now()
+    nombre = "bl-v22-%s-%s-%s.db" % (tipo, ahora.strftime("%Y%m%d-%H%M%S%f"), uuid.uuid4().hex)
+    destino = os.path.join(carpeta_respaldos(), nombre)
+    dato = {"marca": MARCA_RESPALDO, "archivo": nombre, "tipo": tipo,
+            "fecha": ahora.isoformat(timespec="microseconds"), "descripcion": descripcion}
+    try:
+        os.makedirs(carpeta_respaldos(), exist_ok=True)
+        with closing(sqlite3.connect(destino)) as copia:
+            db.cx().backup(copia)
+        with open(destino + ".json", "x", encoding="utf-8") as f:
+            json.dump(dato, f, ensure_ascii=False, indent=2)
+    except Exception:
+        for p in (destino, destino + ".json"):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        return {"error": "No pude guardar la copia de seguridad. No se cambió tu biblioteca. Revisa que haya espacio en el disco."}
+    limitar_respaldos()
+    return {"ok": True, "archivo": destino, "respaldo": dato}
+
+
+def copiar_diario_externo(dato):
+    externa = db.ajuste("carpeta_respaldo_externa", "")
+    if not externa:
+        return ""
+    if not os.path.isdir(externa):
+        return "La copia quedó guardada en este computador. Conecta la carpeta externa para guardar también allí."
+    if es_convertidos(externa):
+        return "La copia quedó guardada en este computador. Elige otra carpeta externa: _convertidos conserva tus trabajos anteriores."
+    try:
+        origen = os.path.join(carpeta_respaldos(), dato["archivo"])
+        destino = os.path.join(externa, dato["archivo"])
+        if os.path.normcase(os.path.abspath(origen)) != os.path.normcase(os.path.abspath(destino)):
+            # Aquí sí se copia: este archivo es un respaldo ya cerrado, nunca la base en uso.
+            shutil.copy2(origen, destino)
+            shutil.copy2(origen + ".json", destino + ".json")
+            limitar_respaldos(externa)
+    except OSError:
+        return "La copia quedó en este computador, pero no pude guardarla en la carpeta externa. Revisa que esté conectada y tenga espacio."
+    return ""
+
+
+@db.exclusivo
+def respaldo_diario():
+    global AVISO_RESPALDO
+    hoy = datetime.now().date().isoformat()
+    dato = next((x for x in listar_respaldos() if x["tipo"] == "diario" and x["fecha"].startswith(hoy)), None)
+    if dato is None:
+        res = respaldar_base("Copia del día al abrir la biblioteca", "diario")
+        if not res.get("ok"):
+            AVISO_RESPALDO = res["error"].replace("No se cambió tu biblioteca. ", "")
+            return res
+        dato = res["respaldo"]
+    AVISO_RESPALDO = copiar_diario_externo(dato)
+    return {"ok": True, "aviso": AVISO_RESPALDO}
+
+
+@db.exclusivo
+def volver_respaldo(nombre):
+    global AVISO_RESPALDO
+    dato = next((x for x in listar_respaldos() if x["archivo"] == nombre), None)
+    if not dato:
+        return {"error": "No encuentro esa copia. Elige otra de la lista."}
+    origen = None
+    previo = None
+    try:
+        from pathlib import Path
+        origen = sqlite3.connect(Path(os.path.join(carpeta_respaldos(), nombre)).as_uri() + "?mode=ro", uri=True)
+        if origen.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise ValueError("copia dañada")
+        tablas = {x[0] for x in origen.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        necesarias = {x[0] for x in db.cx().execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if not necesarias.issubset(tablas):
+            raise ValueError("copia incompleta")
+        # Separar la fuente de su archivo antes de aplicar la retención:
+        # así se puede volver también a la más antigua en Windows.
+        instantanea = sqlite3.connect(":memory:")
+        try:
+            origen.backup(instantanea)
+        except Exception:
+            instantanea.close()
+            raise
+        origen.close()
+        origen = instantanea
+        previo = respaldar_base("Antes de volver a la biblioteca del " + dato["fecha"][:16].replace("T", " "))
+        if not previo.get("ok"):
+            return previo
+        db.cerrar()
+        try:
+            with closing(sqlite3.connect(db.DB_PATH)) as destino:
+                origen.backup(destino)
+        except Exception:
+            # Si una restauración falla, recuperamos la copia previa con la misma API.
+            with closing(sqlite3.connect(previo["archivo"])) as segura, closing(sqlite3.connect(db.DB_PATH)) as destino:
+                segura.backup(destino)
+            raise
+        finally:
+            db.cx()
+        recargar()
+        _VIGILADOS.clear()
+        AVISO_RESPALDO = ""
+        fecha = datetime.fromisoformat(dato["fecha"]).strftime("%d-%m-%Y a las %H:%M")
+        return {"ok": True, "aviso": "Listo, la biblioteca quedó como estaba el " + fecha,
+                "deshacer": os.path.basename(previo["archivo"])}
+    except Exception:
+        if previo is None:
+            return {"error": "No pude abrir esa copia. Tu biblioteca sigue como estaba. Elige otra de la lista."}
+        return {"error": "No pude volver a esa copia. Tus datos actuales siguen guardados en la copia previa."}
+    finally:
+        if origen is not None:
+            origen.close()
+
+
+@cambio_organizacion("Antes de cargar un respaldo")
 def importar_datos(datos, modo="fusionar"):
     """Carga un respaldo. modo=fusionar (respeta lo que ya hay) o reemplazar."""
     if not isinstance(datos, dict) or "modelos" not in datos:
@@ -1510,7 +1618,7 @@ def importar_datos(datos, modo="fusionar"):
             if existe and modo == "fusionar":
                 continue
             campos = {k: m.get(k) for k in ("nombre", "categoria", "subcategoria", "notas",
-                                            "favorito", "costo", "precio", "stock", "cliente_id")}
+                                            "favorito", "costo", "precio", "stock", "cliente_id", "principal", "oculto")}
             db.guardar_meta(m.get("rel", ""), campos)
             n["modelos"] += 1
 
@@ -1551,7 +1659,16 @@ def importar_datos(datos, modo="fusionar"):
             db.guardar_ajuste(k, v)
         for s in datos.get("subcats", []):
             db.ocultar_subcat(s.get("categoria"), s.get("subcategoria"), s.get("oculta"))
+        for cat in datos.get("cats", []):
+            if modo == "fusionar" and db.fila("SELECT nombre FROM cats WHERE nombre=?", (cat["nombre"],)):
+                continue
+            db.guardar_cat(cat["nombre"], cat.get("orden"), cat.get("propia"), cat.get("oculta"))
+        for regla in datos.get("reglas_carpeta", []):
+            if modo == "fusionar" and db.fila("SELECT rel FROM reglas_carpeta WHERE rel=?", (regla["rel"],)):
+                continue
+            db.guardar_regla(regla["rel"], regla["categoria"], regla.get("subcategoria", ""))
         c.commit()
+        recargar_reglas()
     except Exception as e:
         return {"error": str(e)}
     return {"ok": True, "importado": n}
@@ -1640,6 +1757,8 @@ def restaurar_version(rel, vid):
     if not m:
         return {"error": "modelo no encontrado"}
     actual = os.path.join(m["ruta"], v["archivo"])
+    if es_convertidos(actual) or es_convertidos(v["respaldo"]):
+        return {"error": "Los trabajos de _convertidos se conservan tal como están."}
     # leemos la versión a restaurar ANTES de mover nada (evita pisarla)
     with open(v["respaldo"], "rb") as f:
         contenido = f.read()
@@ -1688,6 +1807,7 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     # ------------------------------------------------------------ GET
+    @db.exclusivo
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         r = u.path
@@ -1711,6 +1831,7 @@ class Handler(BaseHTTPRequestHandler):
                            for i, x in enumerate(raices())],
                 "lightburn": buscar_lightburn() or "",
                 "clientes": db.clientes(),
+                "aviso_respaldo": AVISO_RESPALDO,
             })
 
         if r == "/api/modelo":
@@ -1731,25 +1852,18 @@ class Handler(BaseHTTPRequestHandler):
                                     "nombre": PROGRAMAS_DEF[clave]["nombre"],
                                     "instalado": bool(exe)}
             d["programas"] = progs
-            # que pasaria al apretar cada boton grande: ya lo tiene, hay que
-            # convertir, o de plano no se puede
-            corte = m["archivos"]["corte"]
+            # Los botones abren archivos existentes del modelo, incluido PDF.
             d["cambios"] = revisar_cambios(rel)
             d["principal"] = (d["meta"] or {}).get("principal") or ""
             d["abrir_en"] = {}
-            for cual, fmt in (("corel", "svg"), ("lightburn", "lbrn")):
-                nombre, ya = formatos.mejor_origen(corte, m["ruta"], fmt)
-                ext = os.path.splitext(nombre or "")[1].lower()
-                puede = bool(nombre) and (ya or ext not in formatos.CERRADOS)
+            for cual in ("corel", "lightburn"):
+                nombre = archivo_para_programa(m, cual, d["principal"])
+                puede = bool(nombre)
                 d["abrir_en"][cual] = {
                     "puede": puede,
-                    "convierte": bool(nombre) and not ya and puede,
-                    "desde": ext.lstrip(".") if nombre else "",
+                    "archivo": nombre or "",
                     "instalado": bool(buscar_programa(cual)),
-                    "motivo": ("" if puede else
-                               ("Este modelo solo viene en %s, que solo abre CorelDRAW."
-                                % ext if ext in formatos.CERRADOS
-                                else "Este modelo no trae archivos para cortar.")),
+                    "motivo": "" if puede else "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + ".",
                 }
             return self._send(200, d)
 
@@ -1794,8 +1908,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(500, {"error": str(e)})
 
         if r == "/api/abrir-en":
-            # Los dos botones grandes: cada programa recibe el formato que le
-            # sirve. Si el modelo no lo tiene, se convierte en el momento.
+            # Los dos botones grandes abren un archivo que ya existe.
             rel, cual = arg("rel"), arg("programa")
             m = POR_REL.get(rel)
             if not m:
@@ -1803,11 +1916,12 @@ class Handler(BaseHTTPRequestHandler):
             if cual not in ("corel", "lightburn"):
                 return self._send(400, {"error": "programa no valido"})
 
-            destino = "svg" if cual == "corel" else "lbrn"
-            ruta, err, convertido = formatos.preparar(
-                m["ruta"], m["archivos"]["corte"], destino)
-            if err:
-                return self._send(400, {"error": err})
+            elegido = archivo_para_programa(m, cual, (db.meta(rel) or {}).get("principal", ""))
+            if not elegido:
+                return self._send(400, {"error": "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + "."})
+            ruta = os.path.join(m["ruta"], elegido)
+            if not ruta_segura(ruta):
+                return self._send(403, {"error": "No encuentro ese archivo dentro de tus modelos."})
 
             exe = buscar_programa(cual)
             nombre = PROGRAMAS_DEF[cual]["nombre"]
@@ -1822,14 +1936,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 subprocess.Popen([exe, ruta])
                 # anotamos como estaba, para avisar despues si lo edito
-                origen_real = os.path.join(m["ruta"], os.path.basename(ruta))
-                vigilar(rel, origen_real if os.path.exists(origen_real) else ruta)
+                vigilar(rel, ruta)
             except Exception as e:
                 return self._send(500, {"error": "No pude abrirlo: %s" % str(e)[:120]})
             return self._send(200, {
                 "ok": True, "con": nombre if exe else "Windows",
                 "archivo": os.path.basename(ruta),
-                "convertido": convertido,
                 "instalado": bool(exe),
             })
 
@@ -1848,13 +1960,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"programas": programas_estado(),
                                     "asignaciones": CFG.get("asignaciones") or {}})
 
-        if r == "/api/convertir/opciones":
-            a = arg("f")
-            return self._send(200, {
-                "formatos": formatos_destino(a),
-                "motivo": por_que_no(a),
-                "inkscape": bool(buscar_programa("inkscape")),
-            })
 
         if r == "/api/carpeta":
             p = arg("p")
@@ -1916,9 +2021,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, cuerpo, "application/json; charset=utf-8",
                               {"Content-Disposition": f'attachment; filename="{nombre}"'})
 
+        if r == "/api/respaldos":
+            return self._send(200, {"items": listar_respaldos(),
+                                   "carpeta_externa": db.ajuste("carpeta_respaldo_externa", ""),
+                                   "aviso": AVISO_RESPALDO})
+
         return self._send(404, {"error": "no encontrado"})
 
     # ------------------------------------------------------------ POST
+    @db.exclusivo
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
         r = u.path
@@ -1930,8 +2041,8 @@ class Handler(BaseHTTPRequestHandler):
             rel = d.pop("rel", "")
             if not rel or rel not in POR_REL:
                 return self._send(400, {"error": "modelo no válido"})
-            db.guardar_meta(rel, d)
-            return self._send(200, {"ok": True, "meta": db.meta(rel)})
+            res = guardar_edicion(rel, d)
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/favorito":
             rel = self._json().get("rel", "")
@@ -2045,7 +2156,8 @@ class Handler(BaseHTTPRequestHandler):
             rel = self._json().get("rel", "")
             if not rel or rel not in POR_REL:
                 return self._send(400, {"error": "modelo no válido"})
-            return self._send(200, {"ok": True, "oculto": db.alternar_oculto(rel)})
+            res = alternar_modelo_oculto(rel)
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/carpeta/cambiar":
             res = cambiar_carpeta(self._json().get("carpeta"))
@@ -2061,17 +2173,6 @@ class Handler(BaseHTTPRequestHandler):
             res = asignar_extension(d.get("ext", ""), d.get("clave", ""))
             return self._send(200 if res.get("ok") else 400, res)
 
-        if r == "/api/convertir":
-            d = self._json()
-            p = d.get("p", "")
-            if not ruta_segura(p) or not os.path.exists(p):
-                return self._send(403, {"error": "ruta no permitida"})
-            res = convertir_archivo(p, d.get("formato", ""),
-                                    inkscape=buscar_programa("inkscape"))
-            if res.get("ok"):
-                db.registrar_version(d.get("rel", ""), "convertido",
-                                     os.path.basename(res["archivo"]), "")
-            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/principal":
             d = self._json()
@@ -2100,8 +2201,8 @@ class Handler(BaseHTTPRequestHandler):
             nombres = self._json().get("orden") or []
             if not isinstance(nombres, list) or not nombres:
                 return self._send(400, {"error": "orden no valido"})
-            db.ordenar_cats([str(n) for n in nombres])
-            return self._send(200, {"ok": True})
+            res = ordenar_categorias([str(n) for n in nombres])
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/carpeta/agregar":
             res = agregar_carpeta(self._json().get("carpeta"))
@@ -2125,9 +2226,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/carpeta/desmarcar":
-            db.borrar_regla(self._json().get("rel", ""))
-            recargar_reglas()
-            return self._send(200, {"ok": True})
+            res = quitar_regla(self._json().get("rel", ""))
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/subcategoria/crear":
             d = self._json()
@@ -2135,8 +2235,8 @@ class Handler(BaseHTTPRequestHandler):
             nom = (d.get("nombre") or "").strip()
             if not cat or not nom:
                 return self._send(400, {"error": "Elige la categoría y escribe el nombre."})
-            db.crear_subcat(cat, nom)
-            return self._send(200, {"ok": True, "categoria": cat, "nombre": nom})
+            res = crear_subcategoria(cat, nom)
+            return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/subcategoria/renombrar":
             d = self._json()
@@ -2171,6 +2271,29 @@ class Handler(BaseHTTPRequestHandler):
         if r == "/api/datos/importar":
             d = self._json()
             res = importar_datos(d.get("datos"), d.get("modo", "fusionar"))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/respaldos/volver":
+            res = volver_respaldo(self._json().get("archivo", ""))
+            return self._send(200 if res.get("ok") else 400, res)
+
+        if r == "/api/respaldos/carpeta":
+            d = self._json()
+            if d.get("quitar"):
+                db.guardar_ajuste("carpeta_respaldo_externa", "")
+                return self._send(200, {"ok": True})
+            if sys.platform == "win32":
+                ruta = elegir_carpeta_nativa("Elige la carpeta del pendrive u otro disco donde guardar la copia del día")
+            else:
+                ruta, err = pedir_carpeta(db.ajuste("carpeta_respaldo_externa", ""))
+            if not ruta:
+                return self._send(400, {"error": "No elegiste una carpeta. Tu copia de este computador sigue guardada."})
+            if not os.path.isdir(ruta):
+                return self._send(400, {"error": "No encuentro esa carpeta. Revisa que esté conectada."})
+            if es_convertidos(ruta):
+                return self._send(400, {"error": "Elige otra carpeta. _convertidos conserva tus trabajos anteriores."})
+            db.guardar_ajuste("carpeta_respaldo_externa", ruta)
+            res = respaldo_diario()
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/reindexar":
@@ -2254,10 +2377,8 @@ def preparar(avisar=None):
     db.sembrar_costos()
     di("Revisando el orden de las categorias...")
     reordenar_si_hace_falta()
-    try:
-        formatos.limpiar_cache()
-    except Exception:
-        pass
+    di("Guardando la copia de hoy...")
+    respaldo_diario()
     di("Listo")
 
 

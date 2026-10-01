@@ -114,8 +114,10 @@ BUSCAR Y FILTRAR
 * Columna izquierda:
     - Que incluye: con foto / con manual / LightBurn / 3D / con stock
     - Formato (dxf, svg, lbrn2...) y grosor (3mm, 1.5mm...)
-    - Categorias: se abren en arbol (categoria -> subcategoria -> ...)
-      Haz clic en la flechita para desplegar.
+    - Toca Que incluye, Formato o Grosor para plegar esa parte.
+* Categorias, arriba de los modelos: toca el titulo para plegarlas.
+  Al plegar ves la categoria elegida en una sola linea.
+  La app recuerda cada seccion como la dejaste.
 * "Quitar filtros" deja todo como al principio.
 
 
@@ -125,15 +127,15 @@ Se abre su ficha con estas pestanas:
 
 ARCHIVOS  -> a la izquierda estan los DOS BOTONES GRANDES:
 
-                 ABRIR EN LIGHTBURN  -> le pasa un .lbrn
-                 ABRIR EN CORELDRAW  -> le pasa un .svg
+                 ABRIR EN LIGHTBURN
+                 ABRIR EN CORELDRAW
 
-               Si el modelo no tiene ese formato, se convierte
-               SOLO en el momento. No tienes que hacer nada.
-               Debajo del boton dice de que archivo lo saca.
-
-               Los .cdr son la excepcion: son formato cerrado de
-               Corel y solo los abre CorelDRAW.
+               Debajo del boton ves el nombre del archivo que abre.
+               Siempre es un archivo que ya tienes en ese modelo.
+               Si marcaste uno como principal y el programa lo puede
+               abrir, usa ese. Los .cdr se abren en CorelDRAW.
+               Si no hay un archivo compatible, o falta el programa,
+               el boton queda apagado y te explica por que.
 
                Mas abajo: Ver manual, Ver imagen, Abrir carpeta,
                y la lista completa de archivos del modelo.
@@ -141,7 +143,6 @@ ARCHIVOS  -> a la izquierda estan los DOS BOTONES GRANDES:
                El boton  ⋯  al lado sirve para:
                  - abrirlo con OTRO programa (y dejarlo asi
                    para siempre para ese tipo de archivo)
-                 - CONVERTIRLO a otro formato
 
 EDITAR    -> cambia el nombre, la categoria, notas, el costo,
              el precio de venta y el stock para ferias.
@@ -182,6 +183,10 @@ CATEGORIAS Y SUBCATEGORIAS
 --------------------------
 Engranaje -> "Categorias y subcategorias".
 
+Cada categoria parte cerrada. Toca su titulo para ver sus
+subcategorias y botones. Toca otra vez para plegarla.
+Tambien puedes plegar Carpetas con categoria fija.
+
 LAS CATEGORIAS GRANDES (las de la barra de arriba):
   + Categoria nueva  -> crear una tuya
   ▲ ▼                -> subirla o bajarla en la barra
@@ -203,35 +208,19 @@ LAS SUBCATEGORIAS:
 
 Nada de esto borra archivos: solo cambia como se ordenan en la app.
 Y no se deshace solo cuando la app vuelve a leer tu carpeta.
+Antes de cada cambio se guarda una copia. Si algo no te gusta,
+ve a Ajustes -> Respaldo -> Volver a como estaba.
 
 Tambien puedes crear una subcategoria desde la ficha de un modelo:
 pestana EDITAR -> boton  +  al lado de "Subcategoria".
 
 
-CONVERTIR ARCHIVOS
-------------------
-Casi nunca vas a necesitar hacerlo a mano: los botones grandes
-convierten solos. Pero si quieres, en la lista de archivos de un
-modelo esta el boton  ⋯  -> "Convertir a".
+ARCHIVOS DE TRABAJOS ANTERIORES
+------------------------------
+La carpeta _convertidos y tus trabajos de ahi quedan guardados.
+La app ya no crea archivos convertidos ni limpia esa carpeta.
 
-Que se puede, sin instalar NADA:
-  DXF, SVG, EPS, AI      -> a SVG o a .lbrn (de LightBurn)
-  LIGHTBURN (.lbrn2)     -> a SVG, para abrirlo en CorelDRAW
-  FOTOS (jpg, png, ...)  -> entre ellas y a PDF
 
-Lo que NO se puede:
-  CORELDRAW (.cdr)  -> formato cerrado de Corel. Solo lo abre
-                       CorelDRAW. Si quieres usarlo en LightBurn,
-                       abrelo en Corel y guardalo como SVG.
-  AUTOCAD (.dwg)    -> abrelo en AutoCAD o Corel y guardalo
-                       como DXF.
-
-Para llevar un dibujo A LightBurn no hace falta convertir nada:
-LightBurn importa svg, dxf, ai, pdf y png directamente.
-
-Los archivos convertidos NO se mezclan con los tuyos: quedan
-guardados aparte, en la carpeta del programa. Tus carpetas de
-modelos no se ensucian y el original nunca se toca.
 
 
 CLIENTES Y COBROS
@@ -284,6 +273,23 @@ PARA RESPALDARLO usa:
 Eso guarda un archivo con todo (favoritos, nombres, categorias,
 precios, clientes, ventas, costos y materiales) que despues
 puedes volver a cargar con "Cargar respaldo".
+
+COPIAS AUTOMATICAS Y VOLVER A COMO ESTABA
+La app guarda una copia al abrir cada dia y antes de cambiar
+categorias, subcategorias, reglas de carpeta, ocultar o quitar
+modelos y cargar un respaldo. Guarda las ultimas 30 copias del
+dia y las ultimas 30 antes de cambios, en la carpeta respaldos.
+Las copias antiguas que ya tenias no se borran.
+
+En Ajustes -> Respaldo, busca la fecha y el cambio que hiciste
+y toca Volver. Primero se guarda como esta ahora: si quieres
+deshacer el regreso, vuelve a esa nueva copia de la lista.
+Se recuperan los datos de la app (tambien clientes y ventas).
+Los archivos del disco se recuperan desde Papelera o Historial.
+
+Puedes elegir una carpeta de un pendrive u otro disco para
+guardar tambien ahi la copia del dia. Si no esta conectado,
+la app te avisa y la copia de este computador sigue guardada.
 
 NO copies el archivo biblioteca.db con la app abierta: queda a
 medias y se daña. Usa siempre el boton de respaldo.

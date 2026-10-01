@@ -12,10 +12,28 @@ Guarda TODO lo que el usuario edita, sin tocar sus archivos:
 La llave de cada modelo es su RUTA RELATIVA dentro de la biblioteca, así los
 datos sobreviven al re-indexado.
 """
-import os, sqlite3, time, json
+import os, sqlite3, time, json, threading
+from functools import wraps
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = os.environ.get("BIBLIOTECA_LASER_BASE") or os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE, "biblioteca.db")
+LOCK = threading.RLock()
+
+
+def exclusivo(funcion):
+    @wraps(funcion)
+    def protegida(*args, **kwargs):
+        with LOCK:
+            return funcion(*args, **kwargs)
+    return protegida
+
+
+@exclusivo
+def cerrar():
+    global _CX
+    if _CX is not None:
+        _CX.close()
+        _CX = None
 
 ESQUEMA = """
 PRAGMA journal_mode=WAL;
@@ -190,6 +208,7 @@ def migrar(cx):
 
 
 _CX = None
+@exclusivo
 def cx():
     global _CX
     if _CX is None:
@@ -200,13 +219,16 @@ def cx():
     return _CX
 
 
+@exclusivo
 def filas(sql, args=()):
     return [dict(r) for r in cx().execute(sql, args).fetchall()]
 
+@exclusivo
 def fila(sql, args=()):
     r = cx().execute(sql, args).fetchone()
     return dict(r) if r else None
 
+@exclusivo
 def ejecutar(sql, args=()):
     c = cx().execute(sql, args)
     cx().commit()
@@ -460,7 +482,8 @@ def registrar_version(rel, tipo, archivo, respaldo):
                       ORDER BY fecha DESC LIMIT -1 OFFSET ?""", (rel, tipo, MAX_VERSIONES))
     for v in viejas:
         try:
-            if v["respaldo"] and os.path.exists(v["respaldo"]):
+            protegido = "_convertidos" in os.path.normpath(v["respaldo"] or "").replace("\\", "/").lower().split("/")
+            if tipo != "convertido" and not protegido and v["respaldo"] and os.path.exists(v["respaldo"]):
                 os.remove(v["respaldo"])
         except OSError:
             pass

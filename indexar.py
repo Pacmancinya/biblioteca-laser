@@ -9,7 +9,7 @@ Un "modelo" = cualquier carpeta que contenga al menos un archivo cortable
 import os, json, re, sys, time
 import categorias
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = os.environ.get("BIBLIOTECA_LASER_BASE") or os.path.dirname(os.path.abspath(__file__))
 SALIDA = os.path.join(BASE, "biblioteca.json")
 CONFIG = os.path.join(BASE, "config.json")
 RAIZ_POR_DEFECTO = r"D:\Respaldo papá\Laser\Laser"
@@ -82,6 +82,8 @@ TRES_D  = {".stl", ".step", ".stp", ".sldprt", ".skp", ".3dm", ".obj"}
 VIDEO   = {".mp4", ".avi", ".mov", ".mkv"}
 COMPRIM = {".zip", ".rar", ".7z"}
 IGNORAR = {"thumbs.db", "desktop.ini", ".ds_store"}
+CARPETAS_INTERNAS = {"respaldos", "_papelera", "_convertidos", "_versiones_anteriores",
+                    "_version_anterior", ".miniaturas", "_ventana", "_exe"}
 
 # grosores tipo "3mm", "1.5 mm", "6mm"
 RE_GROSOR = re.compile(r"(\d+(?:[.,]\d+)?)\s*mm", re.IGNORECASE)
@@ -137,7 +139,7 @@ def indexar():
       marca = "" if i_carpeta == 0 else ("[%s]" % os.path.basename(carpeta_base.rstrip(os.sep + "/")) )
       for dirpath, dirnames, filenames in os.walk(carpeta_base):
         total_carpetas += 1
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d.lower() not in CARPETAS_INTERNAS]
 
         archivos = {"corte": [], "imagen": [], "manual": [], "3d": [], "video": [], "otro": []}
         grosores = set()

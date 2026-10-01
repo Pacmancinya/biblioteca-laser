@@ -1,6 +1,6 @@
 {
-  "version": "2.1",
-  "nombre": "Mas comodo",
-  "novedades": "Arreglado: al tocar Ver imagen o Ver manual salia un aviso raro de Ajustes-Programas en vez de abrir el archivo. Tambien se mejoro la busqueda de CorelDRAW y LightBurn: ahora los busca donde Windows los tiene anotados, asi los encuentra aunque esten en otra carpeta. Nuevo: puedes tener los modelos en VARIAS carpetas a la vez (Ajustes > Carpetas de modelos). Nuevo: tocando el logo de arriba a la izquierda se esconde o se muestra la columna de filtros, para ver los modelos mas grandes. Y los Ajustes ahora tienen botones arriba para ir directo a lo que buscas, sin bajar por toda la pagina.",
+  "version": "2.2",
+  "nombre": "Ordenado y tranquilo",
+  "novedades": "Ahora puedes plegar las categorías de arriba, los filtros y cada categoría de Ajustes. La app recuerda cómo los dejaste. Antes de cambiar el orden se guarda una copia: en Ajustes > Respaldo puedes volver a como estaba y también deshacer ese regreso. Cada día se guarda otra copia, con opción de llevarla a un pendrive u otro disco. Los botones de CorelDRAW y LightBurn muestran y abren un archivo que ya tienes; también funcionan los modelos que solo traen CDR en CorelDRAW. Ya no hay convertidor. Tus trabajos anteriores de la carpeta _convertidos quedan guardados.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

@@ -166,6 +166,7 @@ def main():
 
     icono = os.path.join(BASE, "icono.ico")
     try:
+        webview.settings['ALLOW_DOWNLOADS'] = True
         ventana = webview.create_window(
             TITULO, url,
             width=1280, height=820, min_size=(900, 600),
