@@ -84,6 +84,36 @@ def leer_geometria(ruta):
 
 
 # --------------------------------------------------------------- medidas
+def medidas_confiables(ruta):
+    """Dimensiones del dibujo en mm, solo con unidades físicas conocidas."""
+    import math
+    import xml.etree.ElementTree as ET
+    ext = os.path.splitext(ruta)[1].lower()
+    try:
+        if ext == ".svg":
+            raiz = ET.parse(ruta).getroot()
+            for campo in ("width", "height"):
+                largo = lector_svg._largo(raiz.get(campo))
+                if not largo or largo[1] not in ("mm", "cm", "in", "pt", "pc"):
+                    return None
+        elif ext == ".dxf":
+            _trazos, unidades = lector_dxf.leer(ruta)
+            if not unidades:
+                return None
+        elif ext not in LIGHTBURN:
+            return None
+        trazos, error = leer_geometria(ruta)
+        if error:
+            return None
+        x0, y0, x1, y1 = _caja(trazos)
+        ancho, alto = x1 - x0, y1 - y0
+        if not all(math.isfinite(n) and 0 < n <= 100000 for n in (ancho, alto)):
+            return None
+        return {"ancho": round(ancho, 2), "alto": round(alto, 2)}
+    except (OSError, ValueError, ET.ParseError):
+        return None
+
+
 def _caja(trazos):
     xs = [x for t in trazos for x, _y in t["puntos"]]
     ys = [y for t in trazos for _x, y in t["puntos"]]

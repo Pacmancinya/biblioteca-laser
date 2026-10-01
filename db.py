@@ -12,12 +12,66 @@ Guarda TODO lo que el usuario edita, sin tocar sus archivos:
 La llave de cada modelo es su RUTA RELATIVA dentro de la biblioteca, así los
 datos sobreviven al re-indexado.
 """
-import os, sqlite3, time, json, threading
+import os, sqlite3, time, json, threading, math
+from contextlib import contextmanager
 from functools import wraps
 
 BASE = os.environ.get("BIBLIOTECA_LASER_BASE") or os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE, "biblioteca.db")
 LOCK = threading.RLock()
+_TRANSACCION = 0
+
+
+@contextmanager
+def transaccion():
+    """El lock cubre toda la operación; los helpers no confirman a mitad."""
+    global _TRANSACCION
+    with LOCK:
+        conexion = cx()
+        externa = _TRANSACCION == 0
+        if externa:
+            conexion.execute("BEGIN IMMEDIATE")
+        _TRANSACCION += 1
+        try:
+            yield conexion
+            if externa:
+                conexion.commit()
+        except BaseException:
+            if externa:
+                conexion.rollback()
+            raise
+        finally:
+            _TRANSACCION -= 1
+
+
+def atomico(funcion):
+    @wraps(funcion)
+    def protegida(*args, **kwargs):
+        with transaccion():
+            return funcion(*args, **kwargs)
+    return protegida
+
+
+def numero(valor, nombre, defecto=0, entero=False):
+    try:
+        n = float(defecto if valor in (None, "") else valor)
+    except (ValueError, TypeError):
+        raise ValueError("Escribe un número válido en " + nombre + ".")
+    if not math.isfinite(n) or n < 0 or (entero and n != int(n)):
+        raise ValueError(nombre + " debe ser un número " + ("entero " if entero else "") + "mayor o igual a cero.")
+    return int(n) if entero else n
+
+
+def validar_cliente(valor):
+    if valor in (None, ""):
+        return None
+    try:
+        identificador = int(valor)
+    except (TypeError, ValueError):
+        raise ValueError("Elige un cliente de la lista.")
+    if not fila("SELECT id FROM clientes WHERE id=?", (identificador,)):
+        raise ValueError("Ese cliente ya no está. Elige otro o deja la acción sin cliente.")
+    return identificador
 
 
 def exclusivo(funcion):
@@ -186,6 +240,11 @@ CREATE INDEX IF NOT EXISTS ix_ped_cli ON pedidos(cliente_id);
 CREATE INDEX IF NOT EXISTS ix_ven_fecha ON ventas(fecha);
 CREATE INDEX IF NOT EXISTS ix_ver_rel ON versiones(rel, tipo);
 CREATE INDEX IF NOT EXISTS ix_mod_fav ON modelos(favorito);
+
+CREATE TABLE IF NOT EXISTS importaciones (
+  origen TEXT, tabla TEXT, id_original TEXT, id_local INTEGER,
+  PRIMARY KEY (origen, tabla, id_original)
+);
 """
 
 
@@ -197,7 +256,9 @@ def conectar():
 
 def migrar(cx):
     """Agrega columnas nuevas a bases creadas por versiones anteriores."""
-    faltantes = {"oculto": "INTEGER DEFAULT 0", "principal": "TEXT"}
+    faltantes = {"oculto": "INTEGER DEFAULT 0", "principal": "TEXT",
+                 "foto_preferida": "TEXT", "manual_preferido": "TEXT", "ruta_guardada": "TEXT",
+                 "no_encontrado": "INTEGER DEFAULT 0"}
     existentes = {r[1] for r in cx.execute("PRAGMA table_info(modelos)").fetchall()}
     for col, tipo in faltantes.items():
         if col not in existentes:
@@ -207,6 +268,8 @@ def migrar(cx):
                 pass
     if "orden" not in {r[1] for r in cx.execute("PRAGMA table_info(subcats)").fetchall()}:
         cx.execute("ALTER TABLE subcats ADD COLUMN orden INTEGER DEFAULT 999")
+    if "stock_descontado" not in {r[1] for r in cx.execute("PRAGMA table_info(ventas)").fetchall()}:
+        cx.execute("ALTER TABLE ventas ADD COLUMN stock_descontado INTEGER")
     cx.commit()
 
 
@@ -233,9 +296,15 @@ def fila(sql, args=()):
 
 @exclusivo
 def ejecutar(sql, args=()):
-    c = cx().execute(sql, args)
-    cx().commit()
-    return c.lastrowid
+    try:
+        c = cx().execute(sql, args)
+        if not _TRANSACCION:
+            cx().commit()
+        return c.lastrowid
+    except Exception:
+        if not _TRANSACCION:
+            cx().rollback()
+        raise
 
 
 # ---------------------------------------------------------------- modelos
@@ -246,11 +315,15 @@ def meta_todos():
 def meta(rel):
     return fila("SELECT * FROM modelos WHERE rel=?", (rel,))
 
+@atomico
 def guardar_meta(rel, campos):
     """Crea o actualiza los metadatos de un modelo."""
     permitidos = {"nombre", "categoria", "subcategoria", "notas", "favorito",
-                  "costo", "precio", "stock", "cliente_id", "oculto", "principal"}
+                  "costo", "precio", "stock", "cliente_id", "oculto", "principal",
+                  "foto_preferida", "manual_preferido", "ruta_guardada", "no_encontrado"}
     campos = {k: v for k, v in campos.items() if k in permitidos}
+    if "cliente_id" in campos:
+        campos["cliente_id"] = validar_cliente(campos["cliente_id"])
     if not campos:
         return
     if not meta(rel):
@@ -259,6 +332,7 @@ def guardar_meta(rel, campos):
     vals = list(campos.values()) + [int(time.time()), rel]
     ejecutar(f"UPDATE modelos SET {sets}, actualizado=? WHERE rel=?", vals)
 
+@atomico
 def alternar_oculto(rel):
     m = meta(rel)
     nuevo = 0 if (m and m.get("oculto")) else 1
@@ -283,6 +357,7 @@ def cats_propias():
     return orden, ocultas, propias
 
 
+@atomico
 def guardar_cat(nombre, orden=None, propia=None, oculta=None):
     """Crea o actualiza una categoría grande, sin pisar lo que no se pasa."""
     r = fila("SELECT * FROM cats WHERE nombre=?", (nombre,))
@@ -302,6 +377,7 @@ def quitar_cat(nombre):
     ejecutar("DELETE FROM cats WHERE nombre=?", (nombre,))
 
 
+@atomico
 def ordenar_cats(nombres):
     """Guarda el orden en que el usuario dejó las categorías."""
     for i, n in enumerate(nombres):
@@ -338,6 +414,7 @@ def crear_subcat(categoria, subcategoria):
              (categoria, subcategoria))
 
 
+@atomico
 def ordenar_subcats(categoria, nombres):
     for i, nombre in enumerate(nombres):
         crear_subcat(categoria, nombre)
@@ -358,6 +435,7 @@ def quitar_subcat(categoria, subcategoria):
              (categoria, subcategoria))
 
 
+@atomico
 def alternar_favorito(rel):
     m = meta(rel)
     nuevo = 0 if (m and m.get("favorito")) else 1
@@ -370,7 +448,7 @@ def clientes():
     return filas("""
       SELECT c.*,
         (SELECT COUNT(*) FROM pedidos p WHERE p.cliente_id=c.id) AS n_pedidos,
-        (SELECT COALESCE(SUM(p.precio - p.abonado),0) FROM pedidos p
+        (SELECT COALESCE(SUM(MAX(0,COALESCE(p.precio,0) - COALESCE(p.abonado,0))),0) FROM pedidos p
            WHERE p.cliente_id=c.id AND p.pagado=0) AS por_cobrar
       FROM clientes c ORDER BY c.nombre COLLATE NOCASE
     """)
@@ -385,8 +463,13 @@ def guardar_cliente(datos, cid=None):
                     (datos.get("nombre", ""), datos.get("telefono", ""),
                      datos.get("email", ""), datos.get("notas", ""), int(time.time())))
 
+@atomico
 def borrar_cliente(cid):
+    if fila("SELECT id FROM pedidos WHERE cliente_id=? AND COALESCE(estado,'pendiente')!='entregado' LIMIT 1", (cid,)):
+        raise ValueError("Este cliente tiene encargos pendientes. Entrégalos o asígnalos a otro cliente antes de eliminarlo.")
     ejecutar("UPDATE pedidos SET cliente_id=NULL WHERE cliente_id=?", (cid,))
+    ejecutar("UPDATE ventas SET cliente_id=NULL WHERE cliente_id=?", (cid,))
+    ejecutar("UPDATE modelos SET cliente_id=NULL WHERE cliente_id=?", (cid,))
     ejecutar("DELETE FROM clientes WHERE id=?", (cid,))
 
 
@@ -402,7 +485,18 @@ def pedidos(cliente_id=None, solo_pendientes=False):
     sql += " ORDER BY COALESCE(p.fecha_vence, p.fecha_pedido) ASC"
     return filas(sql, args)
 
+@atomico
 def guardar_pedido(d, pid=None):
+    d = dict(d)
+    d["cliente_id"] = validar_cliente(d.get("cliente_id"))
+    d["precio"] = numero(d.get("precio"), "precio")
+    d["abonado"] = numero(d.get("abonado"), "abono")
+    if d["abonado"] > d["precio"]:
+        raise ValueError("El abono no puede ser mayor que el precio del encargo.")
+    d["cantidad"] = numero(d.get("cantidad"), "cantidad", 1, entero=True)
+    if d["cantidad"] < 1:
+        raise ValueError("La cantidad debe ser al menos uno.")
+    d.setdefault("estado", "pendiente")
     campos = ("cliente_id", "rel", "descripcion", "cantidad", "precio", "abonado",
               "estado", "pagado", "fecha_pedido", "fecha_vence", "fecha_pago", "notas")
     if pid:
@@ -429,28 +523,51 @@ def ventas(desde=None, hasta=None):
     sql += " ORDER BY v.fecha DESC"
     return filas(sql, args)
 
+@atomico
 def guardar_venta(d, vid=None):
+    d = dict(d)
+    d["cliente_id"] = validar_cliente(d.get("cliente_id"))
+    d["cantidad"] = numero(d.get("cantidad"), "cantidad", 1, entero=True)
+    if d["cantidad"] < 1:
+        raise ValueError("La cantidad debe ser al menos uno.")
+    for campo in ("precio_unit", "costo_unit"):
+        d[campo] = numero(d.get(campo), campo)
     campos = ("fecha", "rel", "item", "cantidad", "precio_unit", "costo_unit",
               "canal", "evento", "cliente_id", "notas")
+    anterior = fila("SELECT * FROM ventas WHERE id=?", (vid,)) if vid else None
+    if vid and not anterior:
+        raise ValueError("No encuentro esa venta.")
+    if anterior and anterior.get("rel"):
+        ejecutar("UPDATE modelos SET stock=COALESCE(stock,0)+? WHERE rel=?",
+                 (anterior["stock_descontado"] if anterior["stock_descontado"] is not None else anterior["cantidad"], anterior["rel"]))
+    descontado = 0
+    if d.get("rel"):
+        modelo = meta(d["rel"])
+        descontado = min(int((modelo or {}).get("stock") or 0), d["cantidad"])
+        # Una sola operación SQL, bajo el mismo lock/transacción que la venta.
+        ejecutar("UPDATE modelos SET stock=MAX(0,COALESCE(stock,0)-?) WHERE rel=?",
+                 (d["cantidad"], d["rel"]))
     if vid:
         sets = ", ".join(f"{k}=?" for k in campos)
         ejecutar(f"UPDATE ventas SET {sets} WHERE id=?", [d.get(k) for k in campos] + [vid])
+        ejecutar("UPDATE ventas SET stock_descontado=? WHERE id=?", (descontado, vid))
         return vid
     d.setdefault("fecha", int(time.time()))
     vid = ejecutar(f"INSERT INTO ventas ({','.join(campos)}) VALUES ({','.join('?'*len(campos))})",
                    [d.get(k) for k in campos])
-    # descuenta del inventario si el modelo lleva stock
-    if d.get("rel"):
-        m = meta(d["rel"])
-        if m and m.get("stock"):
-            nuevo = max(0, int(m["stock"]) - int(d.get("cantidad") or 1))
-            guardar_meta(d["rel"], {"stock": nuevo})
+    ejecutar("UPDATE ventas SET stock_descontado=? WHERE id=?", (descontado, vid))
     return vid
 
+@atomico
 def borrar_venta(vid):
+    anterior = fila("SELECT * FROM ventas WHERE id=?", (vid,))
+    if anterior and anterior.get("rel"):
+        ejecutar("UPDATE modelos SET stock=COALESCE(stock,0)+? WHERE rel=?",
+                 (anterior["stock_descontado"] if anterior["stock_descontado"] is not None else anterior["cantidad"], anterior["rel"]))
     ejecutar("DELETE FROM ventas WHERE id=?", (vid,))
 
 
+@exclusivo
 def metricas():
     """Resumen para el panel."""
     hoy = time.time()
@@ -470,15 +587,22 @@ def metricas():
                               SUM(precio_unit*cantidad) total,
                               SUM(costo_unit*cantidad) costo, COUNT(*) n
                        FROM ventas GROUP BY mes ORDER BY mes DESC LIMIT 12""")
-    cobrar = fila("""SELECT COALESCE(SUM(precio-abonado),0) t, COUNT(*) n
+    cobrar = fila("""SELECT COALESCE(SUM(MAX(0,COALESCE(precio,0)-COALESCE(abonado,0))),0) t, COUNT(*) n
                      FROM pedidos WHERE pagado=0""") or {}
     vencidos = fila("""SELECT COUNT(*) n FROM pedidos
                        WHERE pagado=0 AND fecha_vence IS NOT NULL AND fecha_vence < ?""",
                     (hoy,)) or {}
+    encargos = fila("SELECT COALESCE(SUM(CASE WHEN pagado=1 THEN precio ELSE MIN(COALESCE(abonado,0),COALESCE(precio,0)) END),0) ingreso FROM pedidos")
+    encargos_mes = fila("SELECT COALESCE(SUM(CASE WHEN pagado=1 THEN precio ELSE MIN(COALESCE(abonado,0),COALESCE(precio,0)) END),0) ingreso FROM pedidos WHERE COALESCE(fecha_pago,fecha_pedido)>=?", (mes,))
+    feria = dict(tot)
+    ventas_mes = dict(mes_r)
+    tot["venta"] += encargos["ingreso"]
+    mes_r["venta"] += encargos_mes["ingreso"]
     return {
+        "ventas_feria": feria, "ventas_mes": ventas_mes, "encargos": encargos, "encargos_mes": encargos_mes,
         "total": tot, "mes": mes_r, "top": top, "por_canal": por_canal,
         "por_mes": list(reversed(por_mes)), "por_cobrar": cobrar, "vencidos": vencidos,
-        "n_favoritos": (fila("SELECT COUNT(*) n FROM modelos WHERE favorito=1") or {}).get("n", 0),
+        "n_favoritos": (fila("SELECT COUNT(*) n FROM modelos WHERE favorito=1 AND COALESCE(oculto,0)=0 AND COALESCE(no_encontrado,0)=0") or {}).get("n", 0),
         "n_clientes": (fila("SELECT COUNT(*) n FROM clientes") or {}).get("n", 0),
     }
 
@@ -565,6 +689,11 @@ def costos_fijos():
     return filas("SELECT * FROM costos_fijos ORDER BY id")
 
 def guardar_costo_fijo(d, cid=None):
+    d = dict(d)
+    d["monto"] = numero(d.get("monto"), "monto")
+    d["horas"] = numero(d.get("horas"), "horas")
+    if d["horas"] <= 0:
+        raise ValueError("Las horas deben ser mayores que cero para repartir este costo.")
     campos = ("nombre", "monto", "horas", "grupo")
     if cid:
         sets = ", ".join(f"{k}=?" for k in campos)
@@ -577,6 +706,7 @@ def borrar_costo_fijo(cid):
     ejecutar("DELETE FROM costos_fijos WHERE id=?", (cid,))
 
 
+@atomico
 def sembrar_costos():
     """Carga por primera vez los datos de los Excel del papá."""
     if not costos_fijos():
@@ -638,6 +768,7 @@ def marcar_enviadas():
 def huellas_todas():
     return {r["ruta"]: r for r in filas("SELECT * FROM huellas")}
 
+@atomico
 def guardar_huellas(lista):
     """lista de (ruta, tam, mtime, hash)"""
     if not lista:

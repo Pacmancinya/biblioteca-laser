@@ -115,10 +115,8 @@ def _primera_vez(app):
                                   "Vuelve a abrir el programa cuando quieras.")
             return False
 
-    res = app.cambiar_carpeta(carpeta)
-    if not res.get("ok"):
-        _avisar_error(TITULO, res.get("error", "No pude leer esa carpeta."))
-        return False
+    # La lectura ocurre después de mostrar la pantalla de avance.
+    app.guardar_config({"biblioteca": carpeta})
     return True
 
 
@@ -186,7 +184,6 @@ def main():
         app.recargar()               # por si la migracion trajo datos
         if not _primera_vez(app):
             return 0
-        app.preparar()
         srv, url = app.arrancar_servidor()
     except Exception as e:
         _avisar_error(TITULO, "No pude iniciar la biblioteca.\n\n%s" % e)
@@ -196,7 +193,7 @@ def main():
     try:
         webview.settings['ALLOW_DOWNLOADS'] = True
         ventana = webview.create_window(
-            TITULO, url,
+            TITULO, url + "/inicio",
             width=1280, height=820, min_size=(900, 600),
             background_color="#14120F",
             text_select=True,
@@ -210,7 +207,22 @@ def main():
 
         ventana.events.closed += al_cerrar
 
+        preparado = threading.Event()
+
+        def preparar_ventana():
+            def avisar(texto):
+                ventana.evaluate_js("document.getElementById('arranqueTexto').textContent=" + json.dumps(texto))
+            try:
+                app.preparar(avisar)
+                ventana.load_url(url)
+            except Exception as error:
+                avisar("No pude abrir la biblioteca: " + str(error))
+
         def al_cargar():
+            if not preparado.is_set():
+                preparado.set()
+                threading.Thread(target=preparar_ventana, daemon=True).start()
+                return
             try:
                 registrar_arrastre(ventana, app)
             except Exception:

@@ -435,6 +435,7 @@
       <div id="dupCont"></div>
       <div id="ocuCont"></div>
       <div id="papCont"></div>
+      <div id="faltanCont"></div>
     </div>
 
     <!-- AJUSTES -->
@@ -645,8 +646,13 @@ function refrescarModelo(rel){
     if(actual&&actual.rel===rel&&document.getElementById('velo').classList.contains('on')) return abrirModelo(rel);
   });
 }
+function confirmarQuitarModelo(rel){
+  var elegido=MODELOS.find(function(m){return m.rel===rel}), rutaPadre=elegido&&elegido.ruta;
+  var dentro=MODELOS.filter(function(m){return m.rel!==rel&&(rutaPadre&&m.ruta?m.ruta.replace(/\\/g,'/').toLowerCase().indexOf(rutaPadre.replace(/\\/g,'/').toLowerCase()+'/')===0:m.rel.replace(/\\/g,'/').indexOf(rel.replace(/\\/g,'/')+'/')===0)}).length;
+  return confirm('¿Quitar este modelo de la biblioteca?\n\n'+(dentro?'Esta carpeta contiene '+dentro+' modelos. Solo se quitará este; los de adentro seguirán visibles.\n\n':'')+'Tus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.');
+}
 function quitarModelo(rel){
-  if(!confirm('¿Quitar este modelo de la biblioteca?\n\nTus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.')) return;
+  if(!confirmarQuitarModelo(rel)) return;
   api('/api/borrar-modelo',{rel:rel}).then(function(r){
     if(!r.ok) return toast(r.error||'No pude quitarlo.',true);
     delete seleccionados[rel];
@@ -827,7 +833,18 @@ function clp(n){return '$'+Math.round(n||0).toLocaleString('es-CL')}
 function fech(t){ if(!t) return '—'; var d=new Date(t*1000); return d.toLocaleDateString('es-CL'); }
 function hoy(){ return Math.floor(Date.now()/1000); }
 function toast(m,e){var t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(function(){t.className='toast'},m.length>90?11000:5000)}
-function api(u,d){ return fetch(u, d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:undefined).then(function(r){return r.json()}) }
+function api(u,d){
+  var control=new AbortController(), tiempo=setTimeout(function(){control.abort()},120000);
+  var boton=d&&document.activeElement&&document.activeElement.tagName==='BUTTON'?document.activeElement:null;
+  var guardar=d&&document.getElementById('velo2').classList.contains('on')?document.getElementById('f2Ok'):null;
+  var bloqueados=[boton,guardar].filter(function(b,i,a){return b&&a.indexOf(b)===i&&!b.disabled});
+  bloqueados.forEach(function(b){b.disabled=true});
+  return fetch(u, Object.assign({signal:control.signal},d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:{}))
+    .then(function(r){return r.json().then(function(datos){if(!r.ok||datos.error)throw new Error(datos.error||'No pude completar esta acción.');return datos})})
+    .catch(function(e){toast(e.name==='AbortError'?'La acción demoró demasiado. Revisa el resultado antes de volver a intentarlo.':e.message||'No pude comunicarme con la biblioteca.',true);throw e})
+    .finally(function(){clearTimeout(tiempo);bloqueados.forEach(function(b){b.disabled=false})});
+}
+window.addEventListener('unhandledrejection',function(e){e.preventDefault()});
 
 // ---------------- carga ----------------
 function cargar(){
@@ -838,20 +855,21 @@ function cargar(){
       if(!m||m.oculto) b.closest('.dupi').remove();
     });
     document.getElementById('cargando').style.display='none';
-    filtrosLaterales(); pintarCategorias(); aplicar(true); actualizarPills();
+    filtrosLaterales(); sincronizarBotones(); pintarCategorias(); aplicar(true); actualizarPills();
+    if(d.no_encontrados) toast('Hay '+d.no_encontrados+' modelos con datos que ya no encuentro. Revísalos en Limpieza.',true);
     if(d.aviso_respaldo) toast(d.aviso_respaldo,true);
   });
 }
 cargar().catch(function(){document.getElementById('cargando').textContent='Error al cargar.'});
 
 function actualizarPills(){
-  document.getElementById('pFav').textContent=MODELOS.filter(function(m){return m.fav}).length;
+  document.getElementById('pFav').textContent=MODELOS.filter(function(m){return m.fav&&!m.oculto}).length;
   document.getElementById('pCli').textContent=CLIENTES.length;
 }
 
 function filtrosLaterales(){
   var fm={},gr={};
-  MODELOS.forEach(function(m){(m.fmt||[]).forEach(function(f){fm[f]=(fm[f]||0)+1});(m.gr||[]).forEach(function(g){gr[g]=(gr[g]||0)+1})});
+  MODELOS.filter(function(m){return !m.oculto}).forEach(function(m){(m.fmt||[]).forEach(function(f){fm[f]=(fm[f]||0)+1});(m.gr||[]).forEach(function(g){gr[g]=(gr[g]||0)+1})});
   document.getElementById('filFmt').innerHTML=Object.keys(fm).sort(function(a,b){return fm[b]-fm[a]}).slice(0,8).map(function(f){return '<button class="fb" data-fmt="'+esc(f)+'">'+f.toUpperCase()+'</button>'}).join('');
   document.getElementById('filGrosor').innerHTML=Object.keys(gr).sort(function(a,b){return gr[b]-gr[a]}).slice(0,8).map(function(g){return '<button class="fb" data-gr="'+esc(g)+'">'+esc(g)+'</button>'}).join('');
 }
@@ -860,7 +878,7 @@ function filtrosLaterales(){
 var ICONOS={"Vehículos":"🚗","Animales":"🦋","Hogar y muebles":"🪑","Juegos y juguetes":"🧩",
             "Casas y maquetas":"🏠","Arte y ocasiones":"🎄","Otros":"📦"};
 function pintarCategorias(){
-  var tot=MODELOS.length;
+  var tot=MODELOS.filter(function(m){return !m.oculto}).length;
   var h='<div class="cat-b'+(st.cat?'':' on')+'" data-cat=""><div class="ic">✳️</div><div class="nm">Todos</div><div class="n">'+tot.toLocaleString('es-CL')+'</div></div>';
   h+=(D.categorias||[]).map(function(c){
     return '<div class="cat-b'+(st.cat===c.nombre?' on':'')+'" data-cat="'+esc(c.nombre)+'" data-dest-cat="'+esc(c.nombre)+'">'
@@ -938,6 +956,7 @@ function limpiarFiltros(){
 function aplicar(conservar){
   var anterior=mostrados, scroll=document.getElementById('main').scrollTop;
   var q=norm(st.q).split(/\s+/).filter(Boolean);
+  var pares={llavero:'keychain',corazon:'heart',caja:'box',lampara:'lamp',reloj:'clock',letrero:'sign'};
   filtrados=MODELOS.filter(function(m){
     if(m.oculto && !st.verOcultos) return false;
     if(st.verOcultos && !m.oculto) return false;
@@ -948,13 +967,13 @@ function aplicar(conservar){
       if(f==='stock'){ if(!(m.stock>0)) return false; } else if(!m[f]) return false; }
     if(st.fmt && (m.fmt||[]).indexOf(st.fmt)<0) return false;
     if(st.gr && (m.gr||[]).indexOf(st.gr)<0) return false;
-    if(q.length){ var txt=norm(m.n+' '+m.ruta_partes.join(' ')+' '+(m.notas||''));
-      for(var j=0;j<q.length;j++){ if(txt.indexOf(q[j])<0) return false; } }
+    if(q.length){ var txt=norm(m.n+' '+m.ruta_partes.join(' ')+' '+(m.notas||'')+' '+(m.archivos_busqueda||''));
+      for(var j=0;j<q.length;j++){ var sinonimo=pares[q[j]]||Object.keys(pares).find(function(k){return pares[k]===q[j]}); if(txt.indexOf(q[j])<0&&(!sinonimo||txt.indexOf(sinonimo)<0)) return false; } }
     return true;
   });
   mostrados=0; grid.innerHTML='';
   document.getElementById('vacio').style.display=filtrados.length?'none':'block';
-  document.getElementById('cuenta').innerHTML='<b>'+filtrados.length.toLocaleString('es-CL')+'</b> de '+MODELOS.length.toLocaleString('es-CL');
+  document.getElementById('cuenta').innerHTML='<b>'+filtrados.length.toLocaleString('es-CL')+'</b> de '+MODELOS.filter(function(m){return !m.oculto}).length.toLocaleString('es-CL');
   pintarActivos();
   lote();
   if(conservar===true){ while(mostrados<Math.min(anterior,filtrados.length)) lote(); document.getElementById('main').scrollTop=scroll; }
@@ -966,7 +985,7 @@ function lote(){
     var b=''; if(m.lb)b+='<span class="bdg lb">LBRN</span>'; if(m.man)b+='<span class="bdg man">PDF</span>';
     if(m.d3)b+='<span class="bdg d3">3D</span>'; if(m.stock>0)b+='<span class="bdg stk">'+m.stock+'</span>';
     h+='<div class="card'+(seleccionados[m.rel]?' seleccionada':'')+'" draggable="true" data-rel="'+esc(m.rel)+'">'
-      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'&v='+revisionVista+'" onerror="this.style.display=\'none\'">':SINIMG)
+      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'&v='+encodeURIComponent(m.revision||revisionVista)+'" onerror="this.style.display=\'none\'">':SINIMG)
       + '<button class="estrella'+(m.fav?' on':'')+'" data-fav="'+esc(m.rel)+'"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9L6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg></button>'
       + '<button class="quitar-card" data-quitar-modelo="'+esc(m.rel)+'" title="Quitar de la biblioteca; tus archivos siguen en su carpeta">🗑</button>'
       + '<div class="badges">'+b+'</div></div>'
@@ -1001,7 +1020,7 @@ document.getElementById('tabs').addEventListener('click',function(e){
   if(st.vista==='clientes') verClientes();
   else if(st.vista==='ventas') verVentas();
   else if(st.vista==='panel') verPanel();
-  else if(st.vista==='limpieza') verPapelera();
+  else if(st.vista==='limpieza'){verPapelera();verNoEncontrados()}
   else if(st.vista==='ajustes') verAjustes();
   else aplicar();
 });
@@ -1028,7 +1047,8 @@ function abrirModelo(rel){
   var tab=document.querySelector('.mtab.on'), pesta=misma&&tab?tab.dataset.p:'archivos';
   var scrollFicha=document.querySelector('#velo .mb').scrollTop;
   return api('/api/modelo?rel='+encodeURIComponent(rel)).then(function(m){
-    actual=m; var v=MODELOS.find(function(x){return x.rel===rel})||{};
+    actual=m; var v=m.vista||MODELOS.find(function(x){return x.rel===rel})||{};
+    if(m.aviso_disco) toast(m.aviso_disco,true);
     document.getElementById('dTit').textContent=v.n||m.nombre;
     document.getElementById('dRuta').textContent=m.rel;
     // ¿edito algo en CorelDRAW y lo guardo? Se le ofrece dejarlo como el bueno
@@ -1050,8 +1070,8 @@ function abrirModelo(rel){
     // preview + acciones
     var prev=document.getElementById('dPrev');
     // si no hay foto, se muestra la miniatura que trae adentro el archivo de LightBurn
-    var src = m.preview ? '/api/archivo?p='+encodeURIComponent(m.ruta+'\\'+m.preview)
-            : (v.prev ? '/thumb?rel='+encodeURIComponent(m.rel)+'&v='+revisionVista : '');
+    var src = m.preview ? '/api/archivo?p='+encodeURIComponent(m.ruta+'/'+m.preview)+'&v='+encodeURIComponent(v.revision||revisionVista)
+            : (v.prev ? '/thumb?rel='+encodeURIComponent(m.rel)+'&v='+encodeURIComponent(v.revision||revisionVista) : '');
     if(src){
       prev.innerHTML='<img src="'+esc(src)+'" onerror="this.parentNode.innerHTML=SINIMG">';
       prev.querySelector('img').onclick=function(){document.getElementById('lupaImg').src=src;document.getElementById('lupaFull').classList.add('on')};
@@ -1091,7 +1111,8 @@ function abrirModelo(rel){
     var g=[['corte','Para cortar'],['manual','Manuales'],['imagen','Imágenes'],['3d','3D'],['video','Videos'],['otro','Comprimidos']],h='';
     g.forEach(function(p){var arr=m.archivos[p[0]]||[];if(!arr.length)return;
       h+='<div class="secc"><h4>'+p[1]+' ('+arr.length+')</h4>';
-      arr.slice(0,40).forEach(function(f){var ext=(f.split('.').pop()||'').toLowerCase();
+      arr.forEach(function(f,i){var ext=(f.split('.').pop()||'').toLowerCase();
+        if(i===40) h+='<details><summary class="btn">Ver todos ('+(arr.length-40)+' más)</summary>';
         var pg=PROGS[f];
         // El texto del botón dice a dónde va: "LightBurn", "CorelDRAW"...
         var txt=pg?pg.nombre:'Abrir', tit=pg?('Abrir con '+pg.nombre+(pg.instalado?'':' (no está instalado)')):'Abrir con Windows';
@@ -1099,6 +1120,7 @@ function abrirModelo(rel){
           +'<button data-act="auto" data-f="'+esc(f)+'" title="'+esc(tit)+'"'+(pg&&!pg.instalado?' class="apagado"':'')+'>'+esc(txt)+'</button>'
           +'<button class="bo" data-otro="'+esc(f)+'" title="Abrir con otro programa">⋯</button>'
           +'</div>'});
+      if(arr.length>40) h+='</details>';
       h+='</div>'});
     document.getElementById('dArch').innerHTML=h;
     var bo=document.getElementById('dOcultar');
@@ -1121,6 +1143,7 @@ document.getElementById('dOcultar').addEventListener('click',function(){
   var msg = v.oculto
     ? '¿Volver a mostrar este modelo en la biblioteca?'
     : '¿Quitar este modelo de la biblioteca?\n\nSolo se esconde de la app: los archivos NO se borran de tu computador.\nPuedes volver a mostrarlo desde Limpieza → Ocultos.';
+  if(!v.oculto&&actual.submodelos) msg+='\n\nEsta carpeta contiene '+actual.submodelos+' modelos. Solo se quitará este; los de adentro seguirán visibles.';
   if(!confirm(msg)) return;
   api('/api/ocultar',{rel:actual.rel}).then(function(r){
     if(!r.ok) return toast(r.error||'No se pudo',true);
@@ -1130,10 +1153,22 @@ document.getElementById('dOcultar').addEventListener('click',function(){
   });
 });
 // ---------------- limpieza: duplicados + papelera ----------------
-document.getElementById('buscarDup').onclick=function(){
+
+function verNoEncontrados(){
+  api('/api/no-encontrados').then(function(r){
+    var c=document.getElementById('faltanCont');
+    if(!r.items.length){c.innerHTML='';return}
+    c.innerHTML='<div class="caja"><h4>Modelos que ya no encuentro ('+r.items.length+')</h4><p class="sub">Sus precios, notas y otros datos siguen guardados. Elige la carpeta nueva para recuperarlos, o descarta esos datos. Los archivos se conservan.</p><datalist id="carpetasEncontradas">'+r.destinos.map(function(m){return '<option value="'+esc(m.rel)+'">'+esc(m.ruta)+'</option>'}).join('')+'</datalist>'+
+      r.items.map(function(m,i){return '<div class="secc"><b>'+esc(m.nombre)+'</b><p class="sub">'+esc(m.ruta)+'</p><input id="asociar'+i+'" list="carpetasEncontradas" placeholder="Busca la carpeta nueva" value="'+esc(m.sugeridas.length===1?m.sugeridas[0].rel:'')+'">'+(m.sugeridas.length?'<p class="sub">Carpetas con el mismo nombre: '+m.sugeridas.map(function(s){return esc(s.rel)}).join(', ')+'</p>':'')+'<button class="btn" data-asociar="'+i+'">Asociar carpeta</button> <button class="btn del" data-descartar="'+i+'">Descartar datos</button></div>'}).join('')+'</div>';
+    c.querySelectorAll('[data-asociar],[data-descartar]').forEach(function(b){b.onclick=function(){
+      var descartar=b.dataset.descartar!==undefined, i=+(descartar?b.dataset.descartar:b.dataset.asociar), m=r.items[i];
+      if(!confirm(descartar?'¿Descartar los datos guardados de '+m.nombre+'? Sus ventas y encargos se conservarán sin asociar a un modelo.':'¿Asociar los datos de '+m.nombre+' a la carpeta '+val('asociar'+i)+'?'))return;
+      api('/api/no-encontrados/resolver',{rel:m.rel,destino:val('asociar'+i),descartar:descartar}).then(function(){toast(descartar?'Datos descartados':'Datos asociados');verNoEncontrados();cargar()});
+    }});
+  });
+}
+function resultadoDuplicados(r){
   var c=document.getElementById('dupCont');
-  c.innerHTML='<div class="caja"><p class="sub">Revisando los archivos para encontrar repetidos... esto puede tardar un poco.</p></div>';
-  api('/api/duplicados').then(function(r){
     var g=r.grupos||[];
     if(!g.length){ c.innerHTML='<div class="caja"><h4>Repetidos</h4><p class="sub">No encontré modelos repetidos. 👌</p></div>'; return; }
     DUP=g; DUP_MOSTRADOS=0;
@@ -1142,7 +1177,19 @@ document.getElementById('buscarDup').onclick=function(){
       +'<p class="sub">Marcados con “más completo” los que tienen más archivos. Quita el que no quieras ver. Sus archivos siguen en su carpeta.</p>'
       +'<div id="dupLista"></div><div style="text-align:center;margin-top:12px"><button class="btn" id="dupMas">Mostrar más</button></div></div>';
     pintarDupLote();
-  }).catch(function(){c.innerHTML='<div class="caja"><p class="sub">No se pudo revisar.</p></div>'});
+}
+document.getElementById('buscarDup').onclick=function(){
+  var boton=this,c=document.getElementById('dupCont');boton.disabled=true;
+  c.innerHTML='<div class="caja"><p id="dupAvance">Revisando los archivos...</p><progress id="dupBarra" max="100" value="0" style="width:100%"></progress><button class="btn" id="cancelarDup">Cancelar búsqueda</button></div>';
+  function terminar(){boton.disabled=false}
+  api('/api/duplicados/iniciar',{}).then(function(job){
+    document.getElementById('cancelarDup').onclick=function(){this.disabled=true;api('/api/duplicados/cancelar',{id:job.id})};
+    function revisar(){api('/api/duplicados/estado?id='+encodeURIComponent(job.id)).then(function(r){
+      if(r.estado==='buscando'){document.getElementById('dupBarra').value=Math.round(100*r.actual/r.total);document.getElementById('dupAvance').textContent='Revisando archivos: '+Math.round(100*r.actual/r.total)+'%';setTimeout(revisar,350)}
+      else{terminar();if(r.estado==='listo')resultadoDuplicados(r);else c.innerHTML='<div class="caja"><p class="sub">'+esc(r.estado==='cancelado'?'Búsqueda cancelada. Tus modelos se conservan.':r.error||'No pude revisar los archivos.')+'</p></div>'}
+    }).catch(terminar)}
+    revisar();
+  }).catch(terminar);
 };
 var DUP=[], DUP_MOSTRADOS=0, DUP_LOTE=25;
 function pintarDupLote(){
@@ -1196,7 +1243,7 @@ document.getElementById('v-limpieza').addEventListener('click',function(e){
   var v=e.target.closest('[data-verdup]'); if(v) return abrirModelo(v.dataset.verdup);
   var d=e.target.closest('[data-deldup]');
   if(d){
-    if(!confirm('¿Quitar este modelo de la biblioteca?\n\nSus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.')) return;
+    if(!confirmarQuitarModelo(d.dataset.deldup)) return;
     api('/api/borrar-modelo',{rel:d.dataset.deldup}).then(function(r){
       if(r.ok){ toast(r.aviso||MENSAJE_OCULTO); d.closest('.dupi').remove();
         cargar(); verOcultos(); } else toast(r.error||'No se pudo',true) });
@@ -1368,25 +1415,30 @@ function panelCotizar(m,v){
   cont.innerHTML='<p class="sub">Calculando...</p>';
   api('/api/cotizacion').then(function(c){
     COT=c;
+    var anterior={};try{anterior=JSON.parse(localStorage.getItem('ultimaCotizacion')||'{}')}catch(e){}
+    var medidas=m.medidas_mm;
     var opc=c.materiales.map(function(x){
       return '<option value="'+x.id+'">'+esc(x.nombre)+(x.proveedor?' · '+esc(x.proveedor):'')+' — '+clp(x.precio)+'</option>' }).join('');
     cont.innerHTML=
-      '<div class="fila3"><div class="campo"><label class="lb">Ancho del corte (cm)</label><input id="q_an" type="number" min="0" step="0.1" value="40"></div>'
-      +'<div class="campo"><label class="lb">Largo del corte (cm)</label><input id="q_la" type="number" min="0" step="0.1" value="50"></div>'
-      +'<div class="campo"><label class="lb">Minutos de corte</label><input id="q_min" type="number" min="0" value="'+(c.ajustes.minutos_defecto||30)+'"></div></div>'
+      '<div id="q_precio" class="qres">Precio de venta: calculando...</div>'
+      +'<div class="fila3"><div class="campo"><label class="lb">Ancho del corte (cm)</label><input id="q_an" type="number" min="0" step="any" value="'+(medidas?medidas.ancho/10:anterior.ancho||40)+'"></div>'
+      +'<div class="campo"><label class="lb">Largo del corte (cm)</label><input id="q_la" type="number" min="0" step="any" value="'+(medidas?medidas.alto/10:anterior.largo||50)+'"></div>'
+      +'<div class="campo"><label class="lb">Minutos de corte</label><input id="q_min" type="number" min="0" step="any" value="'+(c.ajustes.minutos_defecto||30)+'"></div></div>'
       +'<div class="campo"><label class="lb">Material</label><select id="q_mat">'+opc+'</select></div>'
-      +'<div class="fila3"><div class="campo"><label class="lb">Luz por pieza</label><input id="q_luz" type="number" min="0" value="'+(c.ajustes.luz_pieza||0)+'"></div>'
-      +'<div class="campo"><label class="lb">Mano de obra</label><input id="q_mo" type="number" min="0" value="'+(c.ajustes.manoobra_pieza||0)+'"></div>'
-      +'<div class="campo"><label class="lb">Utilidad %</label><input id="q_uti" type="number" min="0" value="'+(c.ajustes.utilidad||100)+'"></div></div>'
+      +'<div class="fila3"><div class="campo"><label class="lb">Luz por pieza</label><input id="q_luz" type="number" min="0" step="any" value="'+(c.ajustes.luz_pieza||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Mano de obra</label><input id="q_mo" type="number" min="0" step="any" value="'+(c.ajustes.manoobra_pieza||0)+'"></div>'
+      +'<div class="campo"><label class="lb">Utilidad %</label><input id="q_uti" type="number" min="0" step="any" value="'+(c.ajustes.utilidad||100)+'"></div></div>'
       +'<div class="fila2"><div class="campo"><label class="lb">Cantidad de piezas</label><input id="q_pz" type="number" min="1" value="1"></div>'
-      +'<div class="campo"><label class="lb">Otros costos (opcional)</label><input id="q_ex" type="number" min="0" value=""></div></div>'
+      +'<div class="campo"><label class="lb">Otros costos (opcional)</label><input id="q_ex" type="number" min="0" step="any" value=""></div></div>'
       +'<div id="q_res"></div>'
       +'<div style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap">'
       +'<button class="btn pri" id="q_calc">Calcular</button>'
       +'<button class="btn" id="q_guardar">Guardar como costo y precio del modelo</button></div>'
       +'<p class="sub" style="margin-top:10px">El costo del minuto de máquina sale de tus costos fijos ('
       + '<b style="color:var(--amb2)">'+clp(c.minuto.final)+' por minuto</b>). Se ajusta en ⚙️ Ajustes.</p>';
-    // si el modelo ya tenía medidas guardadas en las notas, no las tocamos
+    if(anterior.material_id&&c.materiales.some(function(x){return x.id==anterior.material_id})) document.getElementById('q_mat').value=anterior.material_id;
+    if(c.minuto.aviso) cont.insertAdjacentHTML('beforeend','<p class="sub">'+esc(c.minuto.aviso)+'</p>');
+    if(medidas) cont.insertAdjacentHTML('beforeend','<p class="sub">Medida del dibujo: '+medidas.ancho+' × '+medidas.alto+' mm. Revisa que corresponda a la pieza que vas a cortar.</p>');
     document.getElementById('q_calc').onclick=calcular;
     document.getElementById('q_guardar').onclick=function(){
       if(!COT || !COT.ultimo) return toast('Primero aprieta Calcular',true);
@@ -1405,8 +1457,14 @@ function calcular(){
   var d={ material_id:+val('q_mat'), ancho:numv('q_an'), largo:numv('q_la'), minutos:numv('q_min'),
           luz:numv('q_luz'), manoobra:numv('q_mo'), utilidad:numv('q_uti'),
           piezas:numv('q_pz')||1, extra:numv('q_ex') };
+  if(['q_an','q_la','q_min','q_luz','q_mo','q_uti','q_pz','q_ex'].some(function(id){var e=document.getElementById(id);return e&&!e.checkValidity()})){
+    COT.ultimo=null;document.getElementById('q_precio').textContent='Revisa los números antes de calcular.';return toast('Usa números válidos, sin negativos; la cantidad debe ser al menos uno.',true);
+  }
+  COT.ultimo=null;document.getElementById('q_precio').textContent='Calculando precio...';
   api('/api/cotizar',d).then(function(r){
     COT.ultimo=r;
+    localStorage.setItem('ultimaCotizacion',JSON.stringify({ancho:d.ancho,largo:d.largo,material_id:d.material_id}));
+    document.getElementById('q_precio').innerHTML='<div class="qrow tot"><span>PRECIO DE VENTA</span><b>'+clp(r.total)+'</b></div>'+(r.piezas>1?'<p>Por '+r.piezas+' piezas: '+clp(r.total_piezas)+'</p>':'');
     var f=function(et,v,cl){ return '<div class="qrow"><span>'+et+'</span><b'+(cl?' class="'+cl+'"':'')+'>'+v+'</b></div>' };
     document.getElementById('q_res').innerHTML='<div class="qres">'
       + f('Material ('+r.area_corte+' cm² × '+clp(r.costo_cm2*1000)+'/1000cm²)', clp(r.costo_material))
@@ -1426,8 +1484,8 @@ function calcular(){
 // -------- cargar archivos --------
 function panelCargar(m){
   var tipos=[['modelo','Modelo para cortar','.dxf,.svg,.eps,.cdr,.ai,.lbrn,.lbrn2,.plt,.dwg'],
-             ['imagen','Imagen / foto','.jpg,.jpeg,.png,.bmp,.webp'],
-             ['manual','Manual (PDF)','.pdf']];
+             ['imagen','Imagen / foto','.jpg,.jpeg,.png,.bmp,.webp,.gif'],
+             ['manual','Manual de armado','.pdf,.jpg,.png,.txt,.doc,.docx']];
   document.getElementById('p-cargar').innerHTML=tipos.map(function(t){
     return '<div class="secc"><h4>'+t[1]+'</h4>'
       + '<div class="zona" data-tipo="'+t[0]+'">Haz clic o arrastra el archivo aquí<br><small style="color:var(--tx3)">'+t[2]+'</small></div>'
@@ -1496,7 +1554,7 @@ function pintarPedidos(){
         +'<td><span class="chip '+(p.estado==='entregado'?'entr':p.estado==='cortado'?'cort':'pend')+'">'+esc(p.estado)+'</span></td>'
         +'<td>'+(venc?'<span class="chip venc">venció '+fech(p.fecha_vence)+'</span>':fech(p.fecha_vence))+'</td>'
         +'<td class="num">'+clp(p.precio)+'</td>'
-        +'<td>'+(p.pagado?'<span class="chip pag">pagado</span>':'<span class="chip deb">debe '+clp((p.precio||0)-(p.abonado||0))+'</span>')+'</td>'
+        +'<td>'+(p.pagado?'<span class="chip pag">pagado</span>':'<span class="chip deb">debe '+clp(Math.max(0,(p.precio||0)-(p.abonado||0)))+'</span>')+'</td>'
         +'<td><button class="btn mini" data-ped="'+p.id+'">Editar</button></td></tr>'}).join('')+'</table>'
    : '<p class="sub">No hay encargos registrados.</p>';
 }
@@ -1529,11 +1587,13 @@ document.getElementById('nuevaVenta').onclick=function(){formVenta(null)};
 // ---------------- panel ----------------
 function verPanel(){
   api('/api/metricas').then(function(k){
-    var gan=(k.total.venta||0)-(k.total.costo||0), ganMes=(k.mes.venta||0)-(k.mes.costo||0);
+    var gan=(k.ventas_feria.venta||0)-(k.ventas_feria.costo||0), ganMes=(k.ventas_mes.venta||0)-(k.ventas_mes.costo||0);
     var h='<div class="kpis">'
       +kpi('Vendido (30 días)',clp(k.mes.venta),'ok')
       +kpi('Ganancia (30 días)',clp(ganMes),'amb')
       +kpi('Vendido total',clp(k.total.venta),'')
+      +kpi('Ingresos por encargos',clp(k.encargos.ingreso),'ok')
+      +kpi('Ventas de feria y otras ventas',clp(k.ventas_feria.venta),'')
       +kpi('Ganancia total',clp(gan),'ok')
       +kpi('Por cobrar',clp(k.por_cobrar.t),(k.por_cobrar.t>0?'rojo':''))
       +kpi('Encargos vencidos',k.vencidos.n||0,(k.vencidos.n>0?'rojo':''))
@@ -1556,7 +1616,7 @@ function verPanel(){
       h+='<div class="caja"><h4>Por dónde vendes</h4><table><tr><th>Canal</th><th class="num">Ventas</th><th class="num">Total</th></tr>'
         +k.por_canal.map(function(c){return '<tr><td>'+esc(c.canal||'—')+'</td><td class="num">'+c.n+'</td><td class="num">'+clp(c.total)+'</td></tr>'}).join('')+'</table></div>';
     }
-    if(!k.total.n) h+='<p class="sub">Cuando registres ventas, acá aparecen tus métricas.</p>';
+    if(!k.total.n&&!k.encargos.ingreso) h+='<p class="sub">Cuando registres ventas o abonos, acá aparecen tus métricas.</p>';
     document.getElementById('panelCont').innerHTML=h;
   });
 }
@@ -1774,9 +1834,10 @@ document.getElementById('catsCont').addEventListener('click',function(e){
     var nom2=bc.dataset.borcat;
     var otras=listaCats().filter(function(x){return x!==nom2});
     var d=prompt('¿Sacar la categoría "'+nom2+'"?\n\nSus modelos NO se borran.\n'
-      +'Escribe a qué categoría los pasamos, o déjalo en blanco para que el programa\n'
-      +'los vuelva a ordenar solo.\n\nQue existen: '+otras.join(', '),'');
+      +'Escribe a qué categoría los pasamos. También se reasignarán los modelos\n'
+      +'que aparezcan al releer.\n\nQue existen: '+otras.join(', '),otras[0]||'Otros');
     if(d===null) return;
+    if(!d.trim()) return toast('Elige una categoría de destino.',true);
     api('/api/categoria/borrar',{nombre:nom2,destino:d.trim()})
       .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos '+(r.destino?('a '+r.destino):'reordenados solos')}));
     return;
@@ -2012,15 +2073,16 @@ document.getElementById('fileImportar').onchange=function(){
   };
   lector.readAsText(f); this.value='';
 };
-function cambiarCarpeta(ruta, boton){
+function cambiarCarpeta(ruta, boton, confirmado){
   var c=document.getElementById('carpetaCont');
   var txt=boton.textContent;
   boton.disabled=true; boton.textContent=ruta?'Leyendo...':'Elige la carpeta...';
   c.innerHTML='<p class="sub">'+(ruta
       ? 'Leyendo los modelos de esa carpeta, espera un momento...'
       : 'Se abrió una ventana para elegir la carpeta.<br><b>Si no la ves, búscala en la barra de tareas</b> (abajo, en la barra de Windows).')+'</p>';
-  api('/api/carpeta/cambiar', ruta?{carpeta:ruta}:{}).then(function(r){
+  api('/api/carpeta/cambiar', {carpeta:ruta||null,confirmado:!!confirmado}).then(function(r){
     boton.disabled=false; boton.textContent=txt;
+    if(r.confirmar){if(confirm(r.aviso))return cambiarCarpeta(r.carpeta,boton,true);verCarpetas();return}
     if(r.ok){
       c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo: '+r.total.toLocaleString('es-CL')+' modelos encontrados en la carpeta nueva.</p>';
       toast('Carpeta cambiada'); document.getElementById('rutaManual').value='';
@@ -2047,7 +2109,7 @@ document.getElementById('btnReindexar').onclick=function(){
     b.textContent='Buscar modelos nuevos'; b.disabled=false;
     if(r.ok){ toast('Listo: '+r.total.toLocaleString('es-CL')+' modelos'); cargar().then(function(){verAjustes()}); }
     else toast(r.error||'No se pudo',true);
-  });
+  }).catch(function(){b.textContent='Buscar modelos nuevos';b.disabled=false});
 };
 
 // ---------------- formularios (modal 2) ----------------
@@ -2061,7 +2123,7 @@ function abrirF2(tit,html,onOk,onDel){
 }
 document.getElementById('f2Cerrar').onclick=function(){document.getElementById('velo2').classList.remove('on')};
 document.getElementById('velo2').addEventListener('click',function(e){if(e.target===this)this.classList.remove('on')});
-document.getElementById('f2Ok').onclick=function(){ if(f2.ok) f2.ok() };
+document.getElementById('f2Ok').onclick=function(){ if(this.disabled)return;var campos=document.getElementById('f2Body').querySelectorAll('input');if(Array.from(campos).some(function(e){return !e.checkValidity()}))return toast('Revisa los números antes de guardar.',true);if(f2.ok) f2.ok() };
 document.getElementById('f2Del').onclick=function(){ if(f2.del&&confirm('¿Eliminar?')) f2.del() };
 function cerrarF2(){document.getElementById('velo2').classList.remove('on')}
 
@@ -2074,8 +2136,8 @@ function formCliente(c){
    +'<div class="campo"><label class="lb">Notas</label><textarea id="c_not">'+esc(c.notas||'')+'</textarea></div>',
     function(){ if(!val('c_nom'))return toast('Escribe el nombre',true);
       api('/api/cliente',{id:c.id,nombre:val('c_nom'),telefono:val('c_tel'),email:val('c_mail'),notas:val('c_not')})
-        .then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();cerrarF2();toast('Cliente guardado')}) },
-    c.id?function(){api('/api/cliente/borrar',{id:c.id}).then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();cerrarF2();toast('Cliente eliminado')})}:null);
+        .then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();verClientes();cerrarF2();toast('Cliente guardado')}) },
+    c.id?function(){if(!confirm('¿Eliminar este cliente y desvincular sus modelos, ventas y encargos entregados? Se conservarán todos esos datos. Si tiene encargos pendientes, primero debes entregarlos o asignarlos a otro cliente.'))return;api('/api/cliente/borrar',{id:c.id}).then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();verClientes();cargar();cerrarF2();toast('Cliente eliminado')})}:null);
 }
 
 function formPedido(p){
@@ -2087,8 +2149,8 @@ function formPedido(p){
    +'<div class="fila2"><div class="campo"><label class="lb">Cliente</label><select id="p_cli"><option value="">— sin cliente —</option>'+opc+'</select></div>'
    +'<div class="campo"><label class="lb">Estado</label><select id="p_est">'+est+'</select></div></div>'
    +'<div class="fila3"><div class="campo"><label class="lb">Cantidad</label><input id="p_cant" type="number" min="1" value="'+(p.cantidad||1)+'"></div>'
-   +'<div class="campo"><label class="lb">Precio total</label><input id="p_pre" type="number" min="0" value="'+(p.precio||'')+'"></div>'
-   +'<div class="campo"><label class="lb">Abonado</label><input id="p_abo" type="number" min="0" value="'+(p.abonado||'')+'"></div></div>'
+   +'<div class="campo"><label class="lb">Precio total</label><input id="p_pre" type="number" min="0" step="any" value="'+(p.precio||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Abonado</label><input id="p_abo" type="number" min="0" step="any" value="'+(p.abonado||'')+'"></div></div>'
    +'<div class="fila2"><div class="campo"><label class="lb">Fecha de entrega / vencimiento</label><input id="p_ven" type="date" value="'+(p.fecha_vence?new Date(p.fecha_vence*1000).toISOString().slice(0,10):'')+'"></div>'
    +'<div class="campo"><label class="lb">¿Pagado?</label><select id="p_pag"><option value="0"'+(!p.pagado?' selected':'')+'>No</option><option value="1"'+(p.pagado?' selected':'')+'>Sí</option></select></div></div>'
    +'<div class="campo"><label class="lb">Notas</label><textarea id="p_not">'+esc(p.notas||'')+'</textarea></div>',
@@ -2107,12 +2169,16 @@ function formVenta(v){
   v=v||{};
   var opc=CLIENTES.map(function(c){return '<option value="'+c.id+'"'+(v.cliente_id==c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'}).join('');
   var can=['feria','cliente','local','otro'].map(function(x){return '<option'+(v.canal===x?' selected':'')+'>'+x+'</option>'}).join('');
+  var modelosVenta=MODELOS.filter(function(m){return !m.oculto});
+  var etiquetas={};modelosVenta.forEach(function(m){etiquetas[m.n]=(etiquetas[m.n]||0)+1});
+  function etiqueta(m){return etiquetas[m.n]>1?m.n+' · '+m.rel:m.n}
+  var seleccionado=modelosVenta.find(function(m){return m.rel===v.rel});
   abrirF2(v.id?'Editar venta':'Registrar venta',
-    '<div class="campo"><label class="lb">Qué vendiste</label><input id="v_item" list="lst_modelos" value="'+esc(v.item||'')+'" placeholder="escribe o elige un modelo"><datalist id="lst_modelos">'
-      + MODELOS.slice(0,600).map(function(m){return '<option value="'+esc(m.n)+'">'}).join('')+'</datalist></div>'
+    '<div class="campo"><label class="lb">Qué vendiste</label><input id="v_item" list="lst_modelos" value="'+esc(seleccionado?etiqueta(seleccionado):v.item||'')+'" placeholder="busca entre todos los modelos o escribe otro artículo"><datalist id="lst_modelos">'
+      + modelosVenta.map(function(m){return '<option value="'+esc(etiqueta(m))+'">'}).join('')+'</datalist></div>'
    +'<div class="fila3"><div class="campo"><label class="lb">Cantidad</label><input id="v_cant" type="number" min="1" value="'+(v.cantidad||1)+'"></div>'
-   +'<div class="campo"><label class="lb">Precio c/u</label><input id="v_pre" type="number" min="0" value="'+(v.precio_unit||'')+'"></div>'
-   +'<div class="campo"><label class="lb">Costo c/u</label><input id="v_cos" type="number" min="0" value="'+(v.costo_unit||'')+'"></div></div>'
+   +'<div class="campo"><label class="lb">Precio c/u</label><input id="v_pre" type="number" min="0" step="any" value="'+(v.precio_unit||'')+'"></div>'
+   +'<div class="campo"><label class="lb">Costo c/u</label><input id="v_cos" type="number" min="0" step="any" value="'+(v.costo_unit||'')+'"></div></div>'
    +'<div class="fila3"><div class="campo"><label class="lb">Dónde</label><select id="v_can">'+can+'</select></div>'
    +'<div class="campo"><label class="lb">Feria / evento</label><input id="v_ev" value="'+esc(v.evento||'')+'"></div>'
    +'<div class="campo"><label class="lb">Fecha</label><input id="v_fec" type="date" value="'+(v.fecha?new Date(v.fecha*1000).toISOString().slice(0,10):new Date().toISOString().slice(0,10))+'"></div></div>'
@@ -2121,12 +2187,17 @@ function formVenta(v){
     function(){
       if(!val('v_item'))return toast('Escribe qué vendiste',true);
       var f=val('v_fec'); var ts=f?Math.floor(new Date(f+'T12:00:00').getTime()/1000):hoy();
-      var rel=null; var mm=MODELOS.find(function(m){return m.n===val('v_item')}); if(mm)rel=mm.rel;
-      api('/api/venta',{id:v.id,fecha:ts,rel:v.rel||rel,item:val('v_item'),cantidad:numv('v_cant')||1,
+      var mm=modelosVenta.find(function(m){return etiqueta(m)===val('v_item')});
+      var rel=mm?mm.rel:null;
+      api('/api/venta',{id:v.id,fecha:ts,rel:rel,item:mm?mm.n:val('v_item'),cantidad:numv('v_cant')||1,
         precio_unit:numv('v_pre'),costo_unit:numv('v_cos'),canal:val('v_can'),evento:val('v_ev'),
         cliente_id:val('v_cli')||null,notas:val('v_not')})
         .then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta registrada');cargar()}) },
     v.id?function(){api('/api/venta/borrar',{id:v.id}).then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta eliminada')})}:null);
+  document.getElementById('v_item').addEventListener('input',function(){
+    var mm=modelosVenta.find(function(m){return etiqueta(m)===val('v_item')});
+    if(mm){document.getElementById('v_pre').value=mm.precio==null?'':mm.precio;document.getElementById('v_cos').value=mm.costo==null?'':mm.costo}
+  });
 }
 
 // ---------------- burbuja de ideas ----------------
@@ -2193,7 +2264,7 @@ verIdeas();
 
 document.getElementById('lupaFull').addEventListener('click',function(){this.classList.remove('on')});
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){document.getElementById('lupaFull').classList.remove('on');document.getElementById('velo').classList.remove('on');cerrarF2()}
+  if(e.key==='Escape'){['lupaFull','velo','veloProg','panelIdeas'].forEach(function(id){document.getElementById(id).classList.remove('on')});cerrarF2()}
   if(e.key==='/'&&document.activeElement!==qEl&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){e.preventDefault();qEl.focus();qEl.select()}
 });
 </script>

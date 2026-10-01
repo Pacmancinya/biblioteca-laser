@@ -21,6 +21,7 @@ import db
 import formatos
 import indexar
 import agregados
+import configuracion
 
 CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
 
@@ -71,6 +72,26 @@ DATOS = cargar_indice()
 RAIZ = DATOS["raiz"]
 MODELOS = DATOS["modelos"]
 POR_REL = {m["rel"]: m for m in MODELOS}
+_REVISIONES = {}
+_MEDIDAS = {}
+
+
+def aplicar_preferencias(m):
+    mt = db.meta(m["rel"]) or {}
+    foto = mt.get("foto_preferida")
+    if foto and foto in m["archivos"]["imagen"]:
+        m["preview"] = foto
+    manual = mt.get("manual_preferido")
+    if manual and any(manual in grupo for grupo in m["archivos"].values()) and manual not in m["archivos"]["manual"]:
+        m["archivos"]["manual"].insert(0, manual)
+        m["tiene_manual"] = True
+    principal = mt.get("principal")
+    corte = m["archivos"]["corte"]
+    if principal and any(principal in grupo for grupo in m["archivos"].values()):
+        if principal in corte:
+            corte.remove(principal)
+        corte.insert(0, principal)
+    return m
 
 
 def recargar_indice():
@@ -79,20 +100,17 @@ def recargar_indice():
     RAIZ = DATOS["raiz"]
     MODELOS = DATOS["modelos"]
     POR_REL = {m["rel"]: m for m in MODELOS}
+    for m in MODELOS:
+        aplicar_preferencias(m)
 
 
 def cargar_config():
-    if os.path.exists(CONFIG):
-        try:
-            with open(CONFIG, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    return configuracion.leer(CONFIG)
 
 def guardar_config(c):
-    with open(CONFIG, "w", encoding="utf-8") as f:
-        json.dump(c, f, ensure_ascii=False, indent=2)
+    global CFG
+    CFG = configuracion.modificar(CONFIG, c)
+    return CFG
 
 CFG = cargar_config()
 
@@ -199,7 +217,7 @@ def buscar_programa(clave):
     if hallado:
         guardados[clave] = hallado
         CFG["programas"] = guardados
-        guardar_config(CFG)
+        guardar_config(lambda c: c.setdefault("programas", {}).update({clave: hallado}))
         return hallado
 
     # 2) si no, se buscan las carpetas de siempre
@@ -216,7 +234,7 @@ def buscar_programa(clave):
                 if os.path.exists(hallado):
                     guardados[clave] = hallado
                     CFG["programas"] = guardados
-                    guardar_config(CFG)
+                    guardar_config(lambda c: c.setdefault("programas", {}).update({clave: hallado}))
                     return hallado
     return ""
 
@@ -248,28 +266,132 @@ def programa_para(archivo):
 
 def raices():
     """Todas las carpetas de modelos: la principal y las agregadas."""
-    r = DATOS.get("raices")
-    if r:
-        return [x for x in r if x]
-    return [RAIZ] if RAIZ else []
+    cfg = cargar_config()
+    r = [cfg.get("biblioteca")] + (cfg.get("bibliotecas_extra") or [])
+    r = [x for x in r if x]
+    return r
 
 
-def ruta_segura(p):
-    """Solo se puede tocar lo que este dentro de alguna carpeta de modelos
-    o de la carpeta del programa."""
+def ruta_segura(p, miniaturas=False):
+    """Raíces de modelos, enlaces resueltos y miniaturas propias; nunca datos de la app."""
     try:
-        p = os.path.abspath(p)
+        if not p or not os.path.isabs(p):
+            return False
+        p = os.path.normcase(os.path.realpath(p))
     except Exception:
         return False
-    permitidas = [x for x in raices() if x] + [BASE]
-    for base in permitidas:
+    # Ni configurar la carpeta de la app como raíz permite descargar sus datos.
+    app_base = os.path.normcase(os.path.realpath(BASE))
+    thumb_base = os.path.normcase(os.path.realpath(CACHE_THUMBS))
+    def dentro(base, ruta):
         try:
-            b = os.path.abspath(base)
-            if os.path.commonpath([b, p]) == b:
-                return True
-        except Exception:
-            continue
+            return os.path.commonpath([base, ruta]) == base
+        except ValueError:
+            return False
+    if miniaturas and dentro(thumb_base, p):
+        return bool(re.fullmatch(r"[a-f0-9]{32}\.jpg", os.path.basename(p)))
+    permitidas = [os.path.normcase(os.path.realpath(x)) for x in raices() if x]
+    if dentro(app_base, p):
+        primero = os.path.relpath(p, app_base).split(os.sep)[0].lower()
+        if primero.startswith(".") or primero in ("_papelera", "_ventana", "respaldos", "_version_anterior", "_exe"):
+            return False
+        # Agregados puede vivir en BASE, con una raíz específica diferente de BASE.
+        if not any(b != app_base and dentro(app_base, b) and dentro(b, p) for b in permitidas):
+            return False
+    for base in permitidas:
+        if dentro(base, p):
+            return True
     return False
+
+
+def error_ruta(p, carpeta=False):
+    if not ruta_segura(p):
+        return "Ese archivo no está dentro de tus carpetas de modelos."
+    for raiz in raices():
+        if not os.path.isdir(raiz):
+            try:
+                if os.path.commonpath([os.path.abspath(raiz), os.path.abspath(p)]) == os.path.abspath(raiz):
+                    return "No encuentro la carpeta de modelos %s. ¿Está conectado el disco?" % raiz
+            except ValueError:
+                pass
+    if not os.path.exists(p):
+        return "No encuentro %s %s. Puede que se haya movido o cambiado de nombre. ¿Está conectado el disco?" % ("la carpeta" if carpeta else "el archivo", p)
+    return ""
+
+
+@db.atomico
+def recordar_rutas():
+    for rel, mt in db.meta_todos().items():
+        m = POR_REL.get(rel)
+        if m and not mt.get("ruta_guardada"):
+            db.guardar_meta(rel, {"ruta_guardada": m["ruta"]})
+
+
+@db.atomico
+def detectar_no_encontrados():
+    for rel, mt in db.meta_todos().items():
+        m = POR_REL.get(rel)
+        guardada = mt.get("ruta_guardada")
+        falta = not m or bool(guardada and os.path.normcase(os.path.realpath(guardada)) != os.path.normcase(os.path.realpath(m["ruta"])))
+        db.guardar_meta(rel, {"no_encontrado": int(falta)})
+
+
+def no_encontrados():
+    salida = []
+    for rel, mt in db.meta_todos().items():
+        if rel in POR_REL and not mt.get("no_encontrado"):
+            continue
+        if not tiene_datos(mt):
+            continue
+        final = rel.replace("\\", "/").split("/")[-1].lower()
+        sugeridas = [{"rel": m["rel"], "nombre": m["nombre"], "ruta": m["ruta"]} for m in MODELOS
+                     if os.path.basename(m["ruta"]).lower() == final]
+        salida.append({"rel": rel, "nombre": mt.get("nombre") or rel, "ruta": mt.get("ruta_guardada") or rel,
+                       "sugeridas": sugeridas})
+    return salida
+
+
+def tiene_datos(meta):
+    return any(meta.get(k) for k in ("nombre", "notas", "categoria", "subcategoria", "favorito", "stock", "cliente_id", "principal", "oculto", "foto_preferida", "manual_preferido")) or any(meta.get(k) is not None for k in ("precio", "costo"))
+
+
+@db.exclusivo
+def resolver_no_encontrado(rel, destino="", descartar=False):
+    # El respaldo precede a la transacción (SQLite.backup no se ejecuta dentro).
+    if rel not in {m["rel"] for m in no_encontrados()}:
+        return {"error": "Ese modelo ya está asociado a una carpeta."}
+    m = POR_REL.get(destino)
+    if not descartar and not m:
+        return {"error": "Elige una carpeta de modelos que aparezca en la biblioteca."}
+    existente = db.meta(destino) if destino != rel else None
+    if existente and tiene_datos(existente):
+        return {"error": "La carpeta elegida ya tiene datos guardados. Elige otra para no pisarlos."}
+    copia = respaldar_base("Antes de recuperar los datos de " + rel)
+    if not copia.get("ok"):
+        return copia
+    with db.transaccion() as c:
+        if descartar:
+            c.execute("DELETE FROM modelos WHERE rel=?", (rel,))
+            c.execute("UPDATE pedidos SET rel=NULL WHERE rel=?", (rel,))
+            c.execute("UPDATE ventas SET rel=NULL WHERE rel=?", (rel,))
+        else:
+            if existente:
+                c.execute("DELETE FROM modelos WHERE rel=?", (destino,))
+            c.execute("UPDATE modelos SET rel=?,ruta_guardada=?,no_encontrado=0 WHERE rel=?", (destino, m["ruta"], rel))
+            for tabla in ("pedidos", "ventas", "versiones"):
+                c.execute("UPDATE " + tabla + " SET rel=? WHERE rel=?", (destino, rel))
+            c.execute("UPDATE reglas_carpeta SET rel=? WHERE rel=?", (destino, rel))
+    recargar_reglas()
+    return {"ok": True}
+
+
+def resolver_categoria(nombre):
+    destinos = json.loads(db.ajuste("categoria_destinos", "{}"))
+    vistos = set()
+    while nombre in destinos and nombre not in vistos:
+        vistos.add(nombre)
+        nombre = destinos[nombre]
+    return nombre
 
 
 def es_convertidos(ruta):
@@ -332,9 +454,9 @@ def modelo_vista(m, metas=None):
         "rel": m["rel"], "id": m["id"],
         "n": mt.get("nombre") or m["nombre"],
         "n_orig": m["nombre"],
-        "c": cat or m["categoria"],
+        "c": resolver_categoria(cat or m["categoria"]),
         "s": sub if sub is not None else m["subcategoria"],
-        "ruta_partes": partes,
+        "ruta_partes": partes, "ruta": m["ruta"],
         "fmt": m["formatos"], "gr": m["grosores"],
         "img": 1 if m["tiene_imagen"] else 0, "man": 1 if m["tiene_manual"] else 0,
         # hay algo que mostrar: una foto, la miniatura del archivo de LightBurn,
@@ -344,7 +466,9 @@ def modelo_vista(m, metas=None):
                              for a in m["archivos"]["corte"])) else 0,
         "lb": 1 if m["tiene_lightburn"] else 0, "d3": 1 if m["tiene_3d"] else 0,
         "fav": 1 if mt.get("favorito") else 0,
-        "oculto": 1 if mt.get("oculto") else 0,
+        "oculto": 1 if mt.get("oculto") or mt.get("no_encontrado") else 0,
+        "revision": str(m.get("mtime", 0)) + "-" + str(mt.get("actualizado", 0)) + "-" + str(_REVISIONES.get(m["rel"], 0)),
+        "archivos_busqueda": " ".join(a for grupo in m["archivos"].values() for a in grupo),
         "costo": mt.get("costo"), "precio": mt.get("precio"), "stock": mt.get("stock") or 0,
         "cliente_id": mt.get("cliente_id"),
         "notas": mt.get("notas") or "",
@@ -436,7 +560,11 @@ def cambio_organizacion(descripcion):
                 copia = respaldar_base(texto)
                 if not copia.get("ok"):
                     return copia
-                return funcion(*args, **kwargs)
+                try:
+                    return funcion(*args, **kwargs)
+                finally:
+                    # También restaura la vista de reglas si una transacción falló.
+                    recargar_reglas()
         return protegida
     return decorar
 
@@ -458,6 +586,7 @@ def crear_categoria(nombre):
 
 
 @cambio_organizacion(lambda nombre, destino="": "Antes de sacar la categoría " + str(nombre))
+@db.atomico
 def borrar_categoria(nombre, destino=""):
     """Saca una categoría grande. Sus modelos pasan a `destino`, o vuelven a
     donde los pondría el programa solo. Nunca se borra nada del disco."""
@@ -467,16 +596,29 @@ def borrar_categoria(nombre, destino=""):
         return {"error": "falta la categoría"}
     vistas = vistas_todas()
     afectados = [v for v in vistas if v["c"] == nombre]
+    if destino == nombre:
+        return {"error": "Elige otra categoría para los modelos."}
+    import categorias as cats
+    if not destino and (nombre in [g["nombre"] for g in cats.estructura()] or afectados or db.fila("SELECT rel FROM modelos WHERE categoria=? LIMIT 1", (nombre,)) or db.fila("SELECT rel FROM reglas_carpeta WHERE categoria=? LIMIT 1", (nombre,))):
+        return {"error": "Elige a qué categoría mandar los modelos antes de borrar esta categoría."}
+    destino = destino or "Otros"
+    _orden, ocultas, _propias = db.cats_propias()
+    posibles = {g["nombre"] for g in categorias_con_conteo(vistas)} | {g["nombre"] for g in cats.estructura() if g["nombre"] not in ocultas}
+    if destino not in posibles and destino != "Otros":
+        return {"error": "Elige una de las categorías existentes para los modelos."}
+    with db.transaccion():
+        db.ejecutar("UPDATE modelos SET categoria=?,subcategoria='' WHERE categoria=?", (destino, nombre))
+        db.ejecutar("UPDATE reglas_carpeta SET categoria=?,subcategoria='' WHERE categoria=?", (destino, nombre))
+        db.ejecutar("DELETE FROM subcats WHERE categoria=?", (nombre,))
+        destinos = json.loads(db.ajuste("categoria_destinos", "{}"))
+        destinos[nombre] = destino
+        db.guardar_ajuste("categoria_destinos", json.dumps(destinos, ensure_ascii=False))
     for v in afectados:
-        if destino:
-            db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": ""})
-        else:
-            # volver a lo automatico: se borra la correccion del usuario
-            db.guardar_meta(v["rel"], {"categoria": "", "subcategoria": ""})
+        db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": ""})
     # y las reglas de carpeta que apuntaban ahi
     for r in db.reglas_carpeta():
         if r["categoria"] == nombre:
-            db.borrar_regla(r["rel"])
+            db.guardar_regla(r["rel"], destino, "")
     recargar_reglas()
     import categorias as cats
     if nombre in [g["nombre"] for g in cats.estructura()]:
@@ -487,14 +629,25 @@ def borrar_categoria(nombre, destino=""):
 
 
 @cambio_organizacion(lambda viejo, nuevo: "Antes de renombrar la categoría " + str(viejo))
+@db.atomico
 def renombrar_categoria(viejo, nuevo):
     viejo, nuevo = (viejo or "").strip(), (nuevo or "").strip()
     if not viejo or not nuevo:
         return {"error": "Faltan los nombres."}
     if viejo == nuevo:
         return {"ok": True, "movidos": 0}
+    if nuevo in [g["nombre"] for g in categorias_con_conteo(vistas_todas())]:
+        return {"error": "Ya existe una categoría con ese nombre."}
     vistas = vistas_todas()
     afectados = [v for v in vistas if v["c"] == viejo]
+    with db.transaccion():
+        db.ejecutar("UPDATE modelos SET categoria=? WHERE categoria=?", (nuevo, viejo))
+        db.ejecutar("UPDATE reglas_carpeta SET categoria=? WHERE categoria=?", (nuevo, viejo))
+        db.ejecutar("UPDATE subcats SET categoria=? WHERE categoria=?", (nuevo, viejo))
+        destinos = json.loads(db.ajuste("categoria_destinos", "{}"))
+        destinos.pop(nuevo, None)
+        destinos[viejo] = nuevo
+        db.guardar_ajuste("categoria_destinos", json.dumps(destinos, ensure_ascii=False))
     for v in afectados:
         db.guardar_meta(v["rel"], {"categoria": nuevo})
     for r in db.reglas_carpeta():
@@ -502,7 +655,7 @@ def renombrar_categoria(viejo, nuevo):
             db.guardar_regla(r["rel"], nuevo, r["subcategoria"])
     recargar_reglas()
     orden, _oc, _pr = db.cats_propias()
-    db.guardar_cat(nuevo, orden=orden.get(viejo, 999), propia=True)
+    db.guardar_cat(nuevo, orden=orden.get(viejo, 999), propia=True, oculta=False)
     import categorias as cats
     if viejo in [g["nombre"] for g in cats.estructura()]:
         db.guardar_cat(viejo, oculta=True)
@@ -597,6 +750,8 @@ def hacer_principal(rel, nombre):
     m = POR_REL.get(rel)
     if not m:
         return {"error": "no existe ese modelo"}
+    if not nombre or os.path.basename(nombre) != nombre or "/" in nombre or "\\" in nombre:
+        return {"error": "Elige un archivo de esta carpeta, sin rutas a otras carpetas."}
     recargar_parcial(rel)
     m = POR_REL[rel]
     origen = os.path.join(m["ruta"], nombre)
@@ -818,12 +973,24 @@ def miniatura(rel):
     lbrn = None
     dibujo = None
     if not origen or not os.path.exists(origen):
-        lbrn = vista_previa_lightburn(m)      # no hay foto: probamos con LightBurn
+        principal = (db.meta(rel) or {}).get("principal")
+        if principal and principal in m["archivos"]["corte"]:
+            p = os.path.join(m["ruta"], principal)
+            ext = os.path.splitext(principal)[1].lower()
+            if os.path.isfile(p) and os.path.getsize(p) < 12_000_000:
+                if ext in formatos.LIGHTBURN:
+                    lbrn = p
+                elif ext in formatos.LEIBLES:
+                    dibujo = p
+        if not lbrn and not dibujo:
+            lbrn = vista_previa_lightburn(m)
         if lbrn:
             origen = lbrn
         else:
             # tampoco hay: dibujamos el modelo a partir del archivo de corte
             for a in (m["archivos"]["corte"] or []):
+                if dibujo:
+                    break
                 p = os.path.join(m["ruta"], a)
                 if (os.path.splitext(a)[1].lower() in formatos.LEIBLES
                         and os.path.exists(p) and os.path.getsize(p) < 12_000_000):
@@ -922,8 +1089,15 @@ def guardar_archivo(rel, tipo, nombre, datos):
     nombre = os.path.basename(nombre).replace("\\", "").replace("/", "")
     if not nombre or nombre in (".", ".."):
         return {"error": "nombre inválido"}
-    if os.path.splitext(nombre)[1].lower() in agregados.PROHIBIDAS:
-        return {"error": "No se agregan ejecutables ni accesos directos."}
+    extension = os.path.splitext(nombre)[1].lower()
+    permitidas = {"imagen": {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"},
+                  "manual": {".pdf", ".jpg", ".png", ".txt", ".doc", ".docx"},
+                  "modelo": EXT_CORTE}
+    if tipo not in permitidas or extension not in permitidas[tipo] or ":" in nombre:
+        return {"error": "Ese tipo de archivo no sirve para esta carga. No se aceptan ejecutables ni accesos directos."}
+    mensaje = error_ruta(carpeta, True)
+    if mensaje:
+        return {"error": mensaje}
     destino = os.path.join(carpeta, nombre)
 
     temporal = ""
@@ -940,6 +1114,10 @@ def guardar_archivo(rel, tipo, nombre, datos):
             f.flush()
             os.fsync(f.fileno())
         os.replace(temporal, destino)
+        if tipo == "imagen":
+            db.guardar_meta(rel, {"foto_preferida": nombre})
+        elif tipo == "manual":
+            db.guardar_meta(rel, {"manual_preferido": nombre})
     except OSError as e:
         return {"error": "No pude guardar el archivo. La versión anterior se conserva: %s" % e}
     finally:
@@ -983,6 +1161,14 @@ def restaurar_papelera(pid):
         return {"error": "no está en la papelera"}
     if es_convertidos(it["origen"]) or es_convertidos(it["destino"]):
         return {"error": "Los trabajos de _convertidos se conservan tal como están."}
+    try:
+        papelera = os.path.normcase(os.path.realpath(PAPELERA))
+        origen_guardado = os.path.normcase(os.path.realpath(it["destino"]))
+        dentro = os.path.commonpath([papelera, origen_guardado]) == papelera
+    except (ValueError, TypeError):
+        dentro = False
+    if not dentro or not ruta_segura(it["origen"]):
+        return {"error": "No encuentro este archivo dentro de la papelera y tus carpetas de modelos. Revisa las carpetas en Ajustes."}
     if not os.path.exists(it["destino"]):
         return {"error": "el archivo ya no está en la papelera"}
     if os.path.exists(it["origen"]):
@@ -1008,7 +1194,7 @@ def vaciar_papelera():
 # ---------------------------------------------------------------- duplicados
 SIMILITUD_MINIMA = 0.65   # cuánto se tienen que parecer dos modelos para ser "el mismo"
 
-def buscar_duplicados():
+def buscar_duplicados(avance=None, cancelar=None):
     """Modelos que son el MISMO modelo: comparten casi todos sus archivos.
 
     Huella por archivo = tamaño + md5 de los primeros 128 KB (se guarda en caché,
@@ -1018,15 +1204,24 @@ def buscar_duplicados():
     nuevas = []
     firmas = {}
     metas = db.meta_todos()
-    visibles = [m for m in MODELOS if not (metas.get(m["rel"]) or {}).get("oculto")]
+    visibles = [m for m in MODELOS if not (metas.get(m["rel"]) or {}).get("oculto") and not (metas.get(m["rel"]) or {}).get("no_encontrado")]
+    total = max(1, len(visibles) * 2)
 
-    for m in visibles:
+    def progreso(numero):
+        if cancelar and cancelar.is_set():
+            raise InterruptedError("Búsqueda cancelada. Tus modelos se conservan.")
+        if avance:
+            avance(numero, total)
+
+    for posicion, m in enumerate(visibles):
+        progreso(posicion)
         a = m.get("archivos") or {}
         candidatos = (a.get("corte") or [])[:25]
         if not candidatos:
             continue
         conj = set()
         for fn in candidatos:
+            progreso(posicion)
             p = os.path.join(m["ruta"], fn)
             try:
                 st = os.stat(p)
@@ -1059,7 +1254,8 @@ def buscar_duplicados():
         por_firma.setdefault("A:" + hashlib.md5("|".join(sorted(conj)).encode()).hexdigest(),
                              set()).add(rel)
 
-    for m in visibles:
+    for posicion, m in enumerate(visibles):
+        progreso(len(visibles) + posicion)
         if not m.get("preview"):
             continue
         p = os.path.join(m["ruta"], m["preview"])
@@ -1119,14 +1315,55 @@ def buscar_duplicados():
             items.sort(key=lambda x: (-x["n_corte"], -x["mb"]))
             grupos.append(items)
     grupos.sort(key=lambda g: -len(g))
+    progreso(total)
     return grupos
+
+
+_DUP_TRABAJOS = {}
+_DUP_LOCK = threading.RLock()
+
+
+def iniciar_duplicados():
+    with _DUP_LOCK:
+        for identificador, trabajo in _DUP_TRABAJOS.items():
+            if trabajo["estado"] == "buscando":
+                return {"ok": True, "id": identificador}
+        # Solo la última búsqueda, para no acumular miles de resultados en memoria.
+        _DUP_TRABAJOS.clear()
+        identificador = uuid.uuid4().hex
+        trabajo = {"estado": "buscando", "actual": 0, "total": 1, "cancelar": threading.Event()}
+        _DUP_TRABAJOS[identificador] = trabajo
+
+    def avance(actual, total):
+        with _DUP_LOCK:
+            trabajo.update(actual=actual, total=total)
+
+    def buscar():
+        try:
+            grupos = buscar_duplicados(avance, trabajo["cancelar"])
+            with _DUP_LOCK:
+                trabajo.update(estado="listo", grupos=grupos)
+        except InterruptedError:
+            with _DUP_LOCK:
+                trabajo["estado"] = "cancelado"
+        except Exception as error:
+            with _DUP_LOCK:
+                trabajo.update(estado="error", error="No pude revisar los archivos: " + str(error))
+    threading.Thread(target=buscar, daemon=True).start()
+    return {"ok": True, "id": identificador}
+
+
+def estado_duplicados(identificador):
+    with _DUP_LOCK:
+        trabajo = _DUP_TRABAJOS.get(identificador)
+        return {k: v for k, v in trabajo.items() if k != "cancelar"} if trabajo else {"error": "No encuentro esa búsqueda."}
 
 
 # ---------------------------------------------------------------- respaldo de datos
 # Archivos que SON la app (se reemplazan al actualizar). Se listan por si
 # hiciera falta, pero la actualización toma todo lo que venga en el paquete:
 # así nunca se queda afuera un archivo nuevo (paso con convertir.py en la 1.4).
-ARCHIVOS_CODIGO = ["app.py", "db.py", "indexar.py", "categorias.py",
+ARCHIVOS_CODIGO = ["app.py", "db.py", "indexar.py", "configuracion.py", "categorias.py",
                    "elegir_carpeta.py", "actualizar.py", "ui.html"]
 
 # Lo que NUNCA se pisa al actualizar: son los datos del usuario.
@@ -1142,7 +1379,7 @@ def costo_por_minuto():
         horas = float(c["horas"] or 0)
         monto = float(c["monto"] or 0)
         if horas <= 0:
-            continue
+            horas = 9600 if c.get("grupo") == "Equipos" else 800
         valor_hora = monto / horas
         valor_min = valor_hora / 60.0
         parcial += valor_min
@@ -1152,7 +1389,7 @@ def costo_por_minuto():
     aj = db.ajustes_todos()
     pct = float(aj.get("ganancia_minuto") or 0)
     ganancia = parcial * pct / 100.0
-    return {"detalle": detalle, "parcial": round(parcial, 4),
+    return {"detalle": detalle, "aviso": "Hay costos con horas en cero: se repartieron en 9.600 horas para equipos y 800 para gastos mensuales. Corrígelos en Ajustes > Costos." if any(float(c.get("horas") or 0) <= 0 for c in db.costos_fijos()) else "", "parcial": round(parcial, 4),
             "ganancia_pct": pct, "ganancia": round(ganancia, 4),
             "final": round(parcial + ganancia, 4)}
 
@@ -1161,11 +1398,13 @@ def cotizar(d):
     """Igual que el Excel 'CALCULO_DE_COSTOS': material por cm2 + tiempo de corte
     + luz + mano de obra + depreciación, y al final la utilidad."""
     aj = db.ajustes_todos()
-    num = lambda v, x=0.0: (float(v) if v not in (None, "") else x)
+    num = lambda v, x=0.0: db.numero(v, "cotización", x)
 
     minutos = num(d.get("minutos"), num(aj.get("minutos_defecto"), 30))
     ancho_c, largo_c = num(d.get("ancho")), num(d.get("largo"))
-    piezas = max(1, int(num(d.get("piezas"), 1)))
+    piezas = db.numero(d.get("piezas"), "cantidad de piezas", 1, entero=True)
+    if piezas < 1:
+        raise ValueError("La cantidad de piezas debe ser al menos uno.")
 
     # material
     mat, costo_cm2, area_plancha = None, 0.0, 0.0
@@ -1314,7 +1553,7 @@ def elegir_programa(clave, ruta=None):
     progs = CFG.get("programas") or {}
     progs[clave] = ruta
     CFG["programas"] = progs
-    guardar_config(CFG)
+    guardar_config(lambda c: c.setdefault("programas", {}).update({clave: ruta}))
     return {"ok": True, "nombre": nombre, "ruta": ruta}
 
 
@@ -1333,37 +1572,34 @@ def asignar_extension(ext, clave):
     else:
         asign.pop(ext, None)
     CFG["asignaciones"] = asign
-    guardar_config(CFG)
+    def cambiar(c):
+        asignaciones = c.setdefault("asignaciones", {})
+        if clave:
+            asignaciones[ext] = clave
+        else:
+            asignaciones.pop(ext, None)
+    guardar_config(cambiar)
     return {"ok": True, "asignaciones": asign}
 
 
-def indexar_ahora(carpeta=None):
+def indexar_ahora(carpeta=None, avance=None):
     """Lee la carpeta de modelos y genera biblioteca.json.
 
     Como .exe no se puede lanzar "python indexar.py": sys.executable es el
     propio programa. Por eso aca se importa indexar y se corre adentro.
     """
-    if CONGELADO:
-        try:
-            import importlib
-            import indexar
-            importlib.reload(indexar)
-            indexar.indexar(carpeta) if carpeta else indexar.indexar()
-            return True, ""
-        except SystemExit:
-            return True, ""            # indexar.py termina con sys.exit(0)
-        except Exception as e:
-            return False, str(e)[:150]
-    args = [sys.executable, os.path.join(BASE, "indexar.py")]
-    if carpeta:
-        args.append(carpeta)
+    for raiz in ([carpeta] if carpeta else raices()):
+        if not os.path.isdir(raiz):
+            return False, "No encuentro la carpeta de modelos %s. ¿Está conectado el disco?" % raiz
     try:
-        r = subprocess.run(args, cwd=BASE, capture_output=True, text=True, timeout=1800)
-        if r.returncode != 0:
-            return False, ((r.stderr or r.stdout or "").strip()[-200:] or "no pude leer esa carpeta")
+        recordar_rutas()
+        indexar.CONFIG, indexar.SALIDA = CONFIG, INDICE
+        indexar.indexar(carpeta, avance=avance)
+        recargar_indice()
+        detectar_no_encontrados()
         return True, ""
     except Exception as e:
-        return False, str(e)[:150]
+        return False, str(e)
 
 
 def agregar_carpeta(ruta=None):
@@ -1392,12 +1628,11 @@ def agregar_carpeta(ruta=None):
 
     cfg = cargar_config()
     if not cfg.get("biblioteca"):
-        cfg["biblioteca"] = ruta
+        guardar_config({"biblioteca": ruta})
     else:
         extra = list(cfg.get("bibliotecas_extra") or [])
         extra.append(ruta)
-        cfg["bibliotecas_extra"] = extra
-    guardar_config(cfg)
+        guardar_config({"bibliotecas_extra": extra})
 
     listo, err = indexar_ahora()
     if not listo:
@@ -1419,7 +1654,7 @@ def quitar_carpeta(ruta):
     extra = [x for x in (cfg.get("bibliotecas_extra") or [])
              if os.path.abspath(x).lower() != os.path.abspath(ruta).lower()]
     cfg["bibliotecas_extra"] = extra
-    guardar_config(cfg)
+    guardar_config({"bibliotecas_extra": extra})
     listo, err = indexar_ahora()
     if not listo:
         return {"error": err or "no pude releer las carpetas"}
@@ -1427,7 +1662,7 @@ def quitar_carpeta(ruta):
     return {"ok": True, "total": len(MODELOS), "carpetas": len(raices())}
 
 
-def cambiar_carpeta(nueva=None):
+def cambiar_carpeta(nueva=None, confirmado=False):
     """Cambia la carpeta de modelos y vuelve a indexar.
     Si no se pasa ruta, abre el selector de carpetas de Windows."""
     if not nueva:
@@ -1446,19 +1681,38 @@ def cambiar_carpeta(nueva=None):
     if not os.path.isdir(nueva):
         return {"error": f"No encuentro esa carpeta: {nueva}"}
 
-    cfg = cargar_config()
-    cfg["biblioteca"] = nueva
-    guardar_config(cfg)
+    recordar_rutas()
+    afectados = [rel for rel, mt in db.meta_todos().items() if rel in POR_REL and
+                 os.path.normcase(os.path.realpath(POR_REL[rel]["ruta"])) != os.path.normcase(os.path.realpath(os.path.join(nueva, rel))) and
+                 not rel.startswith("[") and tiene_datos(mt)]
+    if afectados and not confirmado:
+        return {"confirmar": True, "carpeta": nueva, "afectados": len(afectados),
+                "aviso": "%s modelos tienen datos guardados en la carpeta anterior. Podrás asociarlos o descartarlos en Limpieza > Modelos que ya no encuentro. ¿Cambiar la carpeta?" % len(afectados)}
+    copia = respaldar_base("Antes de cambiar la carpeta principal")
+    if not copia.get("ok"):
+        return copia
+    anterior = cargar_config().get("biblioteca", "")
+    guardar_config({"biblioteca": nueva})
     listo, err = indexar_ahora(nueva)
     if not listo:
+        guardar_config({"biblioteca": anterior})
         return {"error": err or "no pude leer esa carpeta"}
     recargar_indice()
     return {"ok": True, "carpeta": RAIZ, "total": len(MODELOS)}
 
 
+@db.exclusivo
 def exportar_datos():
     """Todo lo que el usuario editó, en un solo archivo para llevarlo a otro PC."""
+    origen = db.ajuste("respaldo_origen", "")
+    if not origen:
+        origen = uuid.uuid4().hex
+        db.guardar_ajuste("respaldo_origen", origen)
+    recordar_rutas()
     return {
+        "formato_version": 3,
+        "origen": origen,
+        "base_origen": BASE,
         "version": APP_VERSION,
         "fecha": int(time.time()),
         "modelos": db.filas("SELECT * FROM modelos"),
@@ -1473,6 +1727,8 @@ def exportar_datos():
         "subcats": db.filas("SELECT * FROM subcats"),
         "cats": db.filas("SELECT * FROM cats"),
         "reglas_carpeta": db.reglas_carpeta(),
+        "versiones": db.filas("SELECT * FROM versiones"),
+        "papelera": db.papelera(),
     }
 
 
@@ -1648,74 +1904,101 @@ def importar_datos(datos, modo="fusionar"):
     """Carga un respaldo. modo=fusionar (respeta lo que ya hay) o reemplazar."""
     if not isinstance(datos, dict) or "modelos" not in datos:
         return {"error": "el archivo no es un respaldo válido"}
-    c = db.cx()
-    n = {"modelos": 0, "clientes": 0, "pedidos": 0, "ventas": 0}
+    if modo not in ("fusionar", "reemplazar") or datos.get("formato_version", 1) not in (1, 2, 3):
+        return {"error": "No conozco ese formato de respaldo."}
+    tablas = ("clientes", "modelos", "pedidos", "ventas", "materiales", "costos_fijos",
+              "cats", "subcats", "reglas_carpeta", "sugerencias", "versiones", "papelera")
+    n = {t: 0 for t in tablas}
+    origen = datos.get("origen") or hashlib.sha256(json.dumps(
+        {k: v for k, v in datos.items() if k != "fecha"}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     try:
-        if modo == "reemplazar":
-            for t in ("modelos", "clientes", "pedidos", "ventas"):
-                c.execute(f"DELETE FROM {t}")
-
-        for m in datos.get("modelos", []):
-            existe = db.meta(m.get("rel", ""))
-            if existe and modo == "fusionar":
-                continue
-            campos = {k: m.get(k) for k in ("nombre", "categoria", "subcategoria", "notas",
-                                            "favorito", "costo", "precio", "stock", "cliente_id", "principal", "oculto")}
-            db.guardar_meta(m.get("rel", ""), campos)
-            n["modelos"] += 1
-
-        mapa_cli = {}
-        for cl in datos.get("clientes", []):
-            viejo = cl.get("id")
-            nuevo = db.guardar_cliente(cl)
-            mapa_cli[viejo] = nuevo
-            n["clientes"] += 1
-
-        for p in datos.get("pedidos", []):
-            p = dict(p); p.pop("id", None)
-            p["cliente_id"] = mapa_cli.get(p.get("cliente_id"), p.get("cliente_id"))
-            db.guardar_pedido(p)
-            n["pedidos"] += 1
-
-        for v in datos.get("ventas", []):
-            v = dict(v); v.pop("id", None)
-            v["cliente_id"] = mapa_cli.get(v.get("cliente_id"), v.get("cliente_id"))
-            db.guardar_venta(v)
-            n["ventas"] += 1
-
-        # costos, materiales y ajustes: reemplazan a los actuales, porque son
-        # los valores con que el usuario cotiza (si no, quedarían duplicados)
-        if datos.get("materiales"):
-            c.execute("DELETE FROM materiales")
-        if datos.get("costos_fijos"):
-            c.execute("DELETE FROM costos_fijos")
-        for m in datos.get("materiales", []):
-            m = dict(m); m.pop("id", None)
-            db.guardar_material(m)
-            n["materiales"] = n.get("materiales", 0) + 1
-        for cf in datos.get("costos_fijos", []):
-            cf = dict(cf); cf.pop("id", None)
-            db.guardar_costo_fijo(cf)
-            n["costos"] = n.get("costos", 0) + 1
-        for k, v in (datos.get("ajustes") or {}).items():
-            db.guardar_ajuste(k, v)
-        for s in datos.get("subcats", []):
-            db.ocultar_subcat(s.get("categoria"), s.get("subcategoria"), s.get("oculta"))
-            db.ejecutar("UPDATE subcats SET orden=? WHERE categoria=? AND subcategoria=?",
-                        (s.get("orden", 999), s.get("categoria"), s.get("subcategoria")))
-        for cat in datos.get("cats", []):
-            if modo == "fusionar" and db.fila("SELECT nombre FROM cats WHERE nombre=?", (cat["nombre"],)):
-                continue
-            db.guardar_cat(cat["nombre"], cat.get("orden"), cat.get("propia"), cat.get("oculta"))
-        for regla in datos.get("reglas_carpeta", []):
-            if modo == "fusionar" and db.fila("SELECT rel FROM reglas_carpeta WHERE rel=?", (regla["rel"],)):
-                continue
-            db.guardar_regla(regla["rel"], regla["categoria"], regla.get("subcategoria", ""))
-        c.commit()
+        with db.transaccion() as c:
+            if modo == "reemplazar":
+                for tabla in tablas + ("ajustes", "importaciones"):
+                    c.execute("DELETE FROM " + tabla)
+            mapa_cli = {}
+            for tabla in tablas:
+                usados = set()
+                registros = datos.get(tabla, [])
+                if not isinstance(registros, list):
+                    raise ValueError("La sección %s del respaldo no es válida." % tabla)
+                columnas = {r[1] for r in c.execute("PRAGMA table_info(" + tabla + ")")}
+                for registro in registros:
+                    if not isinstance(registro, dict):
+                        raise ValueError("Hay un registro inválido en " + tabla)
+                    d = {k: v for k, v in registro.items() if k in columnas and k != "id"}
+                    viejo = registro.get("id")
+                    if "cliente_id" in d:
+                        d["cliente_id"] = mapa_cli.get(str(d["cliente_id"]))
+                    if tabla in ("versiones", "papelera"):
+                        for campo in ("origen", "destino", "respaldo"):
+                            if d.get(campo):
+                                d[campo] = remapear_ruta(d[campo], datos.get("base_origen"), BASE)
+                    if tabla == "modelos":
+                        if not d.get("rel"):
+                            raise ValueError("Un modelo del respaldo no tiene carpeta.")
+                        # La carpeta se vuelve a comprobar en esta instalación.
+                        m = POR_REL.get(d["rel"])
+                        if m:
+                            d["ruta_guardada"] = m["ruta"]
+                            d["no_encontrado"] = 0
+                    clave = str(viejo) if viejo is not None else hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()
+                    existente = None
+                    if "id" in columnas:
+                        marca = c.execute("SELECT id_local FROM importaciones WHERE origen=? AND tabla=? AND id_original=?",
+                                          (origen, tabla, clave)).fetchone()
+                        if marca:
+                            existente = c.execute("SELECT id FROM " + tabla + " WHERE id=?", (marca[0],)).fetchone()
+                        if not existente and d:
+                            # Reconoce registros locales que ya formaban parte del respaldo.
+                            condiciones = " AND ".join(k + " IS ?" for k in d)
+                            coincidencias = c.execute("SELECT id FROM " + tabla + " WHERE " + condiciones, list(d.values())).fetchall()
+                            existente = next((r for r in coincidencias if r[0] not in usados), None)
+                        if existente:
+                            nuevo = existente[0]
+                        else:
+                            campos = ",".join(d)
+                            nuevo = c.execute("INSERT INTO " + tabla + " (" + campos + ") VALUES (" + ",".join("?" for _ in d) + ")", list(d.values())).lastrowid
+                            n[tabla] += 1
+                        usados.add(nuevo)
+                        c.execute("INSERT OR REPLACE INTO importaciones VALUES (?,?,?,?)", (origen, tabla, clave, nuevo))
+                        if tabla == "clientes":
+                            mapa_cli[str(viejo)] = nuevo
+                    else:
+                        keys = {"modelos": ("rel",), "cats": ("nombre",), "subcats": ("categoria", "subcategoria"),
+                                "reglas_carpeta": ("rel",)}[tabla]
+                        if any(not d.get(k) for k in keys):
+                            raise ValueError("Falta un nombre o carpeta en " + tabla)
+                        existe = c.execute("SELECT 1 FROM " + tabla + " WHERE " + " AND ".join(k + "=?" for k in keys), [d[k] for k in keys]).fetchone()
+                        if existe and modo == "fusionar":
+                            continue
+                        campos = ",".join(d)
+                        c.execute("INSERT OR REPLACE INTO " + tabla + " (" + campos + ") VALUES (" + ",".join("?" for _ in d) + ")", list(d.values()))
+                        n[tabla] += 1
+            ajustes = datos.get("ajustes", {})
+            if not isinstance(ajustes, dict):
+                raise ValueError("Los ajustes del respaldo no son válidos.")
+            for k, v in ajustes.items():
+                if k != "respaldo_origen":
+                    db.guardar_ajuste(k, v)
+            detectar_no_encontrados()
         recargar_reglas()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": "No pude cargar el respaldo. Tus datos se conservaron: " + str(e)}
     return {"ok": True, "importado": n}
+
+
+def remapear_ruta(ruta, antigua, nueva):
+    if not antigua:
+        return ruta
+    import ntpath
+    # Los respaldos de Windows pueden cargarse desde otra plataforma.
+    normal = ntpath.normcase(ntpath.normpath(ruta))
+    base = ntpath.normcase(ntpath.normpath(antigua)).rstrip("\\")
+    if normal == base or normal.startswith(base + "\\"):
+        resto = ntpath.relpath(ruta, antigua).replace("\\", os.sep)
+        return os.path.join(nueva, resto)
+    return ruta
 
 
 # ---------------------------------------------------------------- actualizaciones
@@ -1802,6 +2085,8 @@ def restaurar_version(rel, vid):
     if not m:
         return {"error": "modelo no encontrado"}
     actual = os.path.join(m["ruta"], v["archivo"])
+    if not ruta_segura(v["respaldo"]) or os.path.basename(v["archivo"]) != v["archivo"] or "/" in v["archivo"] or "\\" in v["archivo"]:
+        return {"error": "Esa versión no está dentro de tus carpetas de modelos."}
     if es_convertidos(actual) or es_convertidos(v["respaldo"]):
         return {"error": "Los trabajos de _convertidos se conservan tal como están."}
     # Leemos antes de crear otro respaldo: la retención puede retirar esta versión.
@@ -1811,6 +2096,23 @@ def restaurar_version(rel, vid):
 
 
 # ---------------------------------------------------------------- servidor
+def respuesta_segura(funcion):
+    @wraps(funcion)
+    def protegida(self, *args, **kwargs):
+        try:
+            return funcion(self, *args, **kwargs)
+        except Exception as error:
+            import traceback
+            try:
+                with open(os.path.join(BASE, "errores.log"), "a", encoding="utf-8") as registro:
+                    registro.write("\n" + time.strftime("%Y-%m-%d %H:%M:%S ") + self.path + "\n" + traceback.format_exc())
+            except OSError:
+                pass
+            mensaje = str(error) if isinstance(error, (ValueError, FileNotFoundError, TimeoutError)) else "No pude completar esta acción. Inténtalo otra vez. El detalle quedó en errores.log."
+            return self._send(400 if isinstance(error, ValueError) else 500, {"error": mensaje})
+    return protegida
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1828,26 +2130,39 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             self.wfile.write(body)
-        except (BrokenPipeError, ConnectionAbortedError):
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             pass
 
     def _cuerpo(self):
         n = int(self.headers.get("Content-Length") or 0)
-        return self.rfile.read(n) if n else b""
+        if n < 0:
+            raise ValueError("El tamaño de la carga no es válido.")
+        self.connection.settimeout(15)
+        try:
+            datos = self.rfile.read(n) if n else b""
+        except TimeoutError as error:
+            raise ValueError("La carga no terminó. Vuelve a subir el archivo; se conserva el anterior.") from error
+        if len(datos) != n:
+            raise ValueError("La carga se cortó antes de terminar. El archivo anterior se conserva; vuelve a subirlo.")
+        return datos
 
     def _json(self):
-        try:
-            return json.loads(self._cuerpo().decode("utf-8") or "{}")
-        except Exception:
-            return {}
+        datos = json.loads(self._cuerpo().decode("utf-8-sig") or "{}")
+        if not isinstance(datos, dict):
+            raise ValueError("No pude leer los datos de esta acción.")
+        return datos
 
     # ------------------------------------------------------------ GET
+    @respuesta_segura
     @db.exclusivo
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         r = u.path
         q = urllib.parse.parse_qs(u.query)
         arg = lambda k, d="": (q.get(k) or [d])[0]
+
+        if r == "/inicio":
+            return self._send(200, '<!doctype html><html lang="es"><meta charset="utf-8"><style>body{background:#14120F;color:#F1E9DC;font:22px system-ui;display:grid;place-content:center;height:90vh;text-align:center}progress{width:380px;max-width:80vw;margin:auto}</style><h1>Ordenando tu biblioteca...</h1><progress></progress><p id="arranqueTexto">Abriendo tus datos...</p></html>', "text/html; charset=utf-8")
 
         if r in ("/", "/index.html"):
             with open(os.path.join(BASE, "ui.html"), encoding="utf-8") as f:
@@ -1859,10 +2174,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {
                 "modelos": vistas,
                 "categorias": categorias_con_conteo([v for v in vistas if not v["oculto"]]),
-                "total": len(vistas),
+                "total": sum(not v["oculto"] for v in vistas),
+                "no_encontrados": len(no_encontrados()),
                 "raiz": RAIZ,
                 "raices": [{"ruta": x, "principal": (i == 0),
-                            "modelos": sum(1 for m in MODELOS if m.get("raiz", RAIZ) == x)}
+                            "modelos": sum(1 for m in MODELOS if m.get("raiz", RAIZ) == x and not (metas.get(m["rel"]) or {}).get("oculto") and not (metas.get(m["rel"]) or {}).get("no_encontrado"))}
                            for i, x in enumerate(raices())],
                 "lightburn": buscar_lightburn() or "",
                 "clientes": db.clientes(),
@@ -1874,7 +2190,27 @@ class Handler(BaseHTTPRequestHandler):
             m = POR_REL.get(rel)
             if not m:
                 return self._send(404, {"error": "no existe"})
+            aviso = error_ruta(m["ruta"], True)
+            if not aviso:
+                m = recargar_parcial(rel)
+                if not m:
+                    return self._send(404, {"error": "Esta carpeta ya no contiene archivos para cortar. Sus datos se conservan en Limpieza."})
             d = dict(m)
+            d["aviso_disco"] = aviso
+            d["vista"] = modelo_vista(m)
+            padre = os.path.normcase(os.path.realpath(m["ruta"])).rstrip(os.sep) + os.sep
+            d["submodelos"] = sum(os.path.normcase(os.path.realpath(x["ruta"])).startswith(padre) for x in MODELOS)
+            d["medidas_mm"] = None
+            if not aviso:
+                for archivo in m["archivos"]["corte"]:
+                    ruta = os.path.join(m["ruta"], archivo)
+                    if os.path.isfile(ruta) and os.path.getsize(ruta) < 12_000_000:
+                        clave = (ruta, os.stat(ruta).st_mtime_ns, os.path.getsize(ruta))
+                        if clave not in _MEDIDAS:
+                            _MEDIDAS[clave] = formatos.medidas_confiables(ruta)
+                        if _MEDIDAS[clave]:
+                            d["medidas_mm"] = _MEDIDAS[clave]
+                            break
             d["meta"] = db.meta(rel) or {}
             d["versiones"] = db.versiones(rel)
             # con qué programa se abre cada archivo (por su extensión)
@@ -1911,16 +2247,19 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/archivo":
             p = arg("p")
-            if not ruta_segura(p) or not os.path.exists(p):
-                return self._send(404, b"", "text/plain")
+            if not ruta_segura(p, miniaturas=True):
+                return self._send(403, {"error": "Ese archivo no está dentro de tus carpetas de modelos."})
+            if not os.path.isfile(p):
+                return self._send(404, {"error": error_ruta(p) or "No encuentro ese archivo."})
             ctype = mimetypes.guess_type(p)[0] or "application/octet-stream"
             with open(p, "rb") as f:
                 return self._send(200, f.read(), ctype, {"Cache-Control": "no-cache"})
 
         if r == "/api/abrir":
             p, modo = arg("p"), arg("modo", "auto")
-            if not ruta_segura(p) or not os.path.exists(p):
-                return self._send(403, {"error": "ruta no permitida"})
+            mensaje = error_ruta(p)
+            if mensaje:
+                return self._send(404, {"error": mensaje})
             try:
                 # "auto" = con el programa que corresponde a ese tipo de archivo
                 if modo == "auto":
@@ -1950,11 +2289,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "no existe ese modelo"})
             if cual not in ("corel", "lightburn"):
                 return self._send(400, {"error": "programa no valido"})
+            mensaje = error_ruta(m["ruta"], True)
+            if mensaje:
+                return self._send(404, {"error": mensaje})
 
             elegido = archivo_para_programa(m, cual, (db.meta(rel) or {}).get("principal", ""))
             if not elegido:
                 return self._send(400, {"error": "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + "."})
             ruta = os.path.join(m["ruta"], elegido)
+            mensaje = error_ruta(ruta)
+            if mensaje:
+                return self._send(404, {"error": mensaje})
             if not ruta_segura(ruta):
                 return self._send(403, {"error": "No encuentro ese archivo dentro de tus modelos."})
 
@@ -1984,9 +2329,10 @@ class Handler(BaseHTTPRequestHandler):
             reglas = []
             for x in db.reglas_carpeta():
                 rel = x["rel"]
-                n = sum(1 for m in MODELOS
-                        if m["rel"].lower() == rel.lower()
-                        or m["rel"].lower().startswith(rel.lower() + os.sep))
+                metas = db.meta_todos()
+                n = sum(1 for m in MODELOS if not (metas.get(m["rel"]) or {}).get("oculto") and not (metas.get(m["rel"]) or {}).get("no_encontrado")
+                        and (m["rel"].lower() == rel.lower()
+                        or m["rel"].lower().startswith(rel.lower() + os.sep)))
                 reglas.append({"rel": rel, "categoria": x["categoria"],
                                "subcategoria": x["subcategoria"], "modelos": n})
             return self._send(200, {"reglas": reglas, "raiz": RAIZ})
@@ -1998,8 +2344,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/carpeta":
             p = arg("p")
-            if not ruta_segura(p) or not os.path.exists(p):
-                return self._send(403, {"error": "ruta no permitida"})
+            mensaje = error_ruta(p, True)
+            if mensaje:
+                return self._send(404, {"error": mensaje})
             subprocess.Popen(["explorer", os.path.normpath(p)])
             return self._send(200, {"ok": True})
 
@@ -2047,6 +2394,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/duplicados":
             return self._send(200, {"grupos": buscar_duplicados()})
+        if r == "/api/duplicados/estado":
+            return self._send(200, estado_duplicados(arg("id")))
+        if r == "/api/no-encontrados":
+            return self._send(200, {"items": no_encontrados(), "destinos": [{"rel": m["rel"], "nombre": m["nombre"], "ruta": m["ruta"]} for m in MODELOS]})
 
         if r == "/api/version":
             return self._send(200, {"version": APP_VERSION, "nombre": APP_NOMBRE})
@@ -2068,12 +2419,24 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "no encontrado"})
 
     # ------------------------------------------------------------ POST
+    @respuesta_segura
     @db.exclusivo
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
         r = u.path
         q = urllib.parse.parse_qs(u.query)
         arg = lambda k, d="": (q.get(k) or [d])[0]
+
+        if r == "/api/duplicados/iniciar":
+            self._json()
+            return self._send(200, iniciar_duplicados())
+        if r == "/api/duplicados/cancelar":
+            d = self._json()
+            with _DUP_LOCK:
+                trabajo = _DUP_TRABAJOS.get(d.get("id"))
+                if trabajo:
+                    trabajo["cancelar"].set()
+            return self._send(200, {"ok": True})
 
         if r == "/api/meta":
             d = self._json()
@@ -2193,8 +2556,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True, "items": db.sugerencias()})
 
         if r == "/api/config/whatsapp":
-            CFG["whatsapp"] = str(self._json().get("numero") or "").strip()
-            guardar_config(CFG)
+            guardar_config({"whatsapp": str(self._json().get("numero") or "").strip()})
             return self._send(200, {"ok": True, "whatsapp": CFG["whatsapp"]})
 
         if r == "/api/ocultar":
@@ -2205,7 +2567,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/carpeta/cambiar":
-            res = cambiar_carpeta(self._json().get("carpeta"))
+            d = self._json()
+            res = cambiar_carpeta(d.get("carpeta"), d.get("confirmado", False))
+            return self._send(200 if res.get("ok") or res.get("confirmar") else 400, res)
+        if r == "/api/no-encontrados/resolver":
+            d = self._json()
+            res = resolver_no_encontrado(d.get("rel"), d.get("destino", ""), d.get("descartar", False))
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/programa":
@@ -2378,6 +2745,7 @@ def contexto_carpeta(ruta):
 
 
 def invalidar_miniatura(rel):
+    _REVISIONES[rel] = time.time_ns()
     thumb = os.path.join(CACHE_THUMBS, hashlib.md5(rel.encode("utf-8")).hexdigest() + ".jpg")
     if os.path.isfile(thumb):
         os.remove(thumb)
@@ -2396,6 +2764,7 @@ def _releer_carpeta(ruta):
         MODELOS.remove(anterior)
         POR_REL.pop(rel, None)
     if nuevo:
+        aplicar_preferencias(nuevo)
         MODELOS.append(nuevo)
         POR_REL[rel] = nuevo
     invalidar_miniatura(rel)
@@ -2429,7 +2798,7 @@ def releer_arbol(ruta):
     return nuevos
 
 
-def reordenar_si_hace_falta():
+def reordenar_si_hace_falta(avance=None):
     """Si la app trae una forma nueva de ordenar los modelos, vuelve a leer la
     carpeta sola. Sin esto, mejorar las categorías no cambiaría nada hasta que
     el usuario apretara 'Buscar modelos nuevos' a mano."""
@@ -2440,13 +2809,11 @@ def reordenar_si_hace_falta():
     if guardada >= nueva or not RAIZ or not os.path.isdir(RAIZ):
         return False
     print("  Ordenando tus modelos con las categorías nuevas...")
-    listo, _err = indexar_ahora(RAIZ)
+    listo, _err = indexar_ahora(RAIZ, avance=avance)
     if not listo:
         print("  (no se pudo reordenar ahora; puedes hacerlo en Ajustes)")
         return False
-    DATOS = cargar_indice()
-    MODELOS = DATOS["modelos"]
-    POR_REL = {m["rel"]: m for m in MODELOS}
+    recargar_indice()
     print("  Listo: tus modelos quedaron ordenados de nuevo.")
     return True
 
@@ -2461,6 +2828,8 @@ def recargar():
     RAIZ = DATOS.get("raiz", "")
     MODELOS = DATOS.get("modelos", [])
     POR_REL = {m["rel"]: m for m in MODELOS}
+    for m in MODELOS:
+        aplicar_preferencias(m)
     recargar_reglas()
     return len(MODELOS)
 
@@ -2472,8 +2841,12 @@ def preparar(avisar=None):
     di("Abriendo tus datos...")
     db.cx()
     db.sembrar_costos()
+    if not MODELOS and cargar_config().get("biblioteca"):
+        listo, error = indexar_ahora(avance=di)
+        if not listo:
+            raise OSError(error)
     di("Revisando el orden de las categorias...")
-    reordenar_si_hace_falta()
+    reordenar_si_hace_falta(di)
     di("Guardando la copia de hoy...")
     respaldo_diario()
     di("Listo")

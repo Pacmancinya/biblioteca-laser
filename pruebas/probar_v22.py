@@ -579,7 +579,10 @@ class Version22(unittest.TestCase):
         self.assertIn("abre la Biblioteca desde su icono", ventana.evaluate_js.call_args.args[0])
 
     def test_lectura_parcial_identica_a_completa_formatos_grosores_3dm(self):
-        for nombre, tipo, contenido in [("modelo_3mm.lbrn2", "modelo", b"lb"), ("objeto.3dm", "modelo", b"3d"),
+        # Los 3D existentes se indexan, pero la carga solo acepta formatos de corte.
+        (self.modelos / "animal" / "objeto.3dm").write_bytes(b"3d")
+        self.assertIn("error", app.guardar_archivo("animal", "modelo", "nuevo.3dm", b"3d"))
+        for nombre, tipo, contenido in [("modelo_3mm.lbrn2", "modelo", b"lb"),
                                        ("manual.pdf", "manual", b"pdf"), ("animal.png", "imagen", self.foto())]:
             self.assertTrue(app.guardar_archivo("animal", tipo, nombre, contenido)["ok"])
         parcial = dict(app.POR_REL["animal"])

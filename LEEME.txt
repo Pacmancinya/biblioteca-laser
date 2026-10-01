@@ -61,6 +61,61 @@ Para que vuelva: Limpieza -> Ver ocultos -> Volver a mostrar.
 La papelera anterior se conserva solo para recuperar lo que ya
 estaba ahí. Ya no se mandan archivos a ella ni se puede vaciar.
 
+Si el modelo tiene otros modelos adentro, se avisa antes:
+solo se esconde el que elegiste; los de adentro siguen visibles.
+
+
+SI CAMBIA UNA CARPETA O FALTA EL DISCO
+-------------------------------------
+Si desconectas el disco, la biblioteca se conserva y te avisa.
+Conecta el disco y vuelve a Buscar modelos nuevos.
+
+Si renombraste o moviste una carpeta, sus datos siguen guardados.
+En Limpieza -> Modelos que ya no encuentro puedes buscar la
+carpeta nueva y asociarle sus precios, notas, stock y favoritos.
+Se sugieren carpetas con el mismo nombre. Descartar datos pide
+confirmacion; conserva los archivos, ventas y encargos.
+
+Antes de cambiar la carpeta principal te avisa cuantos modelos
+con datos quedaran sin encontrar. Se recuperan desde Limpieza.
+
+
+VENTAS, ENCARGOS Y CLIENTES
+---------------------------
+Registrar venta permite buscar todos los modelos y completa
+precio y costo; puedes cambiarlos. Guardar espera a que termine.
+Editar una venta corrige el stock por la diferencia. Eliminarla
+repone lo que se descontó. El Panel incluye los abonos de
+encargos y los muestra separados de las ventas.
+
+Un abono no puede superar el precio del encargo. Un cliente con
+encargos pendientes no se puede eliminar: primero entregalos o
+asignalos a otro cliente. Eliminar otros clientes conserva sus
+modelos, ventas y encargos, dejandolos sin cliente.
+
+
+RESPALDOS, FICHAS Y COTIZAR
+----------------------------
+Cargar el mismo respaldo no repite clientes, encargos ni ventas,
+ni vuelve a descontar stock. Si falla, tus datos quedan como
+estaban. Antes de cargarlo se guarda una copia automaticamente.
+El respaldo de datos no copia los archivos de tus modelos.
+
+La ficha vuelve a leer su carpeta al abrir. Si hay muchos
+archivos, toca Ver todos. Subir una foto nueva cambia la vista.
+Se aceptan fotos jpg/jpeg/png/webp/gif/bmp; manuales
+pdf/jpg/png/txt/doc/docx; y formatos de corte para los modelos.
+No se aceptan programas ni accesos directos.
+
+Cotizar usa la medida del dibujo cuando es confiable, o las
+ultimas medidas que usaste. Recuerda el material y muestra el
+precio arriba. Revisa las medidas antes de cortar.
+Si aparece un aviso de costos con horas en cero, corrigelos en
+Ajustes -> Costos; mientras tanto usa el reparto inicial.
+
+Buscar repetidos muestra cuanto lleva y permite Cancelar.
+Escape cierra Abrir con y la burbuja de ideas.
+
 
 ORDENAR ARRASTRANDO
 --------------------

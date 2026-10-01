@@ -19,3 +19,4 @@ biblioteca.db-wal
 biblioteca.json
 config.json
 respaldos/
+errores.log

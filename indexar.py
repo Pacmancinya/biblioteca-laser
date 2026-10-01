@@ -8,33 +8,17 @@ Un "modelo" = cualquier carpeta que contenga al menos un archivo cortable
 """
 import os, json, re, sys, time
 import categorias
+import configuracion
 
 BASE = os.environ.get("BIBLIOTECA_LASER_BASE") or os.path.dirname(os.path.abspath(__file__))
 SALIDA = os.path.join(BASE, "biblioteca.json")
 CONFIG = os.path.join(BASE, "config.json")
-RAIZ_POR_DEFECTO = r"D:\Respaldo papá\Laser\Laser"
+RAIZ_POR_DEFECTO = ""
 
 
 def obtener_raiz():
-    """Ruta de la biblioteca: 1) argumento, 2) config.json, 3) por defecto, 4) preguntar."""
-    if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
-        return guardar_raiz(sys.argv[1])
-    cfg = {}
-    if os.path.exists(CONFIG):
-        try:
-            with open(CONFIG, encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            cfg = {}
-    if cfg.get("biblioteca") and os.path.isdir(cfg["biblioteca"]):
-        return cfg["biblioteca"]
-    if os.path.isdir(RAIZ_POR_DEFECTO):
-        return guardar_raiz(RAIZ_POR_DEFECTO)
-    r = elegir_carpeta()
-    if not r:
-        print("No se eligió ninguna carpeta.")
-        sys.exit(1)
-    return guardar_raiz(r)
+    """Nunca abre diálogos ni adivina la carpeta de otro computador."""
+    return configuracion.leer(CONFIG).get("biblioteca") or ""
 
 
 def elegir_carpeta():
@@ -60,16 +44,7 @@ def elegir_carpeta():
 
 
 def guardar_raiz(r):
-    cfg = {}
-    if os.path.exists(CONFIG):
-        try:
-            with open(CONFIG, encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            pass
-    cfg["biblioteca"] = r
-    with open(CONFIG, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    configuracion.modificar(CONFIG, {"biblioteca": r})
     return r
 
 
@@ -77,7 +52,7 @@ RAIZ = None  # se define en indexar()
 
 CORTE   = {".dxf", ".svg", ".eps", ".cdr", ".ai", ".lbrn", ".lbrn2", ".plt", ".dwg", ".cmx"}
 IMAGEN  = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".tif", ".tiff"}
-MANUAL  = {".pdf"}
+MANUAL  = {".pdf", ".txt", ".doc", ".docx"}
 TRES_D  = {".stl", ".step", ".stp", ".sldprt", ".skp", ".3dm", ".obj"}
 VIDEO   = {".mp4", ".avi", ".mov", ".mkv"}
 COMPRIM = {".zip", ".rar", ".7z"}
@@ -102,19 +77,13 @@ def todas_las_carpetas():
     asi lo que el usuario ya tenia guardado (favoritos, precios) sigue
     calzando. Las extra van en "bibliotecas_extra".
     """
-    cfg = {}
-    if os.path.exists(CONFIG):
-        try:
-            with open(CONFIG, encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            pass
+    cfg = configuracion.leer(CONFIG)
     carpetas = []
     principal = cfg.get("biblioteca")
-    if principal and os.path.isdir(principal):
+    if principal:
         carpetas.append(principal)
     for extra in (cfg.get("bibliotecas_extra") or []):
-        if extra and os.path.isdir(extra) and extra not in carpetas:
+        if extra and extra not in carpetas:
             carpetas.append(extra)
     return carpetas
 
@@ -239,10 +208,17 @@ def guardar_json_atomico(ruta, datos):
             os.remove(temporal)
 
 
-def indexar():
+def indexar(carpeta=None, avance=None):
     global RAIZ
-    RAIZ = obtener_raiz()
+    RAIZ = carpeta or obtener_raiz()
+    if not RAIZ:
+        raise ValueError("Elige tu carpeta de modelos en Ajustes > Carpetas.")
     carpetas = todas_las_carpetas() or [RAIZ]
+    if carpeta:
+        carpetas[0] = carpeta
+    for raiz in carpetas:
+        if not os.path.isdir(raiz):
+            raise FileNotFoundError("No encuentro la carpeta de modelos %s. ¿Está conectado el disco?" % raiz)
     RAIZ = carpetas[0]
     print("Biblioteca:", RAIZ)
     for extra in carpetas[1:]:
@@ -252,13 +228,19 @@ def indexar():
     t0 = time.time()
     modelos = []
     total_carpetas = 0
+    ultima_notificacion = 0
 
     for i_carpeta, carpeta_base in enumerate(carpetas):
       # las carpetas agregadas llevan una marca en su ruta relativa, para que
       # dos modelos que se llamen igual en carpetas distintas no se pisen
       marca = "" if i_carpeta == 0 else ("[%s]" % os.path.basename(carpeta_base.rstrip(os.sep + "/")) )
-      for dirpath, dirnames, filenames in os.walk(carpeta_base):
+      def fallo(error):
+          raise error
+      for dirpath, dirnames, filenames in os.walk(carpeta_base, onerror=fallo):
         total_carpetas += 1
+        if avance and time.monotonic() - ultima_notificacion >= 0.1:
+            avance("Ordenando tu biblioteca... %s carpetas, %s modelos" % (total_carpetas, len(modelos)))
+            ultima_notificacion = time.monotonic()
         dirnames[:] = [d for d in dirnames if not d.startswith(".") and d.lower() not in CARPETAS_INTERNAS]
 
         m = leer_modelo(dirpath, carpeta_base, marca, len(modelos))
@@ -287,7 +269,12 @@ def indexar():
         "categorias": categorias.estructura(),
         "modelos": modelos,
     }
+    for raiz in carpetas:
+        if not os.path.isdir(raiz):
+            raise FileNotFoundError("No encuentro la carpeta de modelos %s. ¿Está conectado el disco?" % raiz)
     guardar_json_atomico(SALIDA, data)
+    if avance:
+        avance("Ordenando tu biblioteca... %s carpetas, %s modelos. Listo." % (total_carpetas, len(modelos)))
 
     seg = round(time.time() - t0, 1)
     if len(carpetas) > 1:
@@ -312,4 +299,8 @@ def indexar():
 
 
 if __name__ == "__main__":
-    indexar()
+    try:
+        indexar(sys.argv[1] if len(sys.argv) > 1 else None)
+    except (OSError, ValueError) as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(1)

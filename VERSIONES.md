@@ -8,6 +8,44 @@ Al publicar una nueva hay que actualizar **los dos**:
 
 > Regla: **nunca repetir el nombre ni el texto de novedades** entre versiones.
 
+La tercera parte de **2.2, Ordenado y tranquilo** (1-oct-2026) completa la
+auditoría de funciones de 2.1, manteniendo los cambios de las partes 1 y 2:
+
+- Subidas permitidas según su tipo, comprobación del tamaño recibido y archivos
+  temporales; archivos de la app y rutas externas bloqueados. Configuración
+  compartida con lock, lectura con BOM y reemplazo atómico.
+- Respaldo JSON de formato 3: datos de modelos, principal y visibilidad,
+  clientes, encargos, ventas, sugerencias, materiales, costos, ajustes,
+  categorías, subcategorías, reglas e historial/papelera. Importación completa
+  en una transacción, con copia previa, remapeo de clientes, identificación de
+  registros existentes y ventas sin volver a descontar stock.
+- Sin diálogos en el indexador ni carpeta del autor. Un disco ausente conserva
+  el índice. Limpieza muestra modelos que ya no encuentra y permite asociar
+  sus datos a otra carpeta o descartarlos explícitamente. Cambiar la principal
+  avisa cuántos modelos con datos se perderían de vista.
+- Ventas con descuento SQL y transacción: editar ajusta la diferencia, borrar
+  repone lo descontado y Guardar se bloquea durante la solicitud. Selector de
+  todos los modelos con precio y costo. Clientes con pendientes no se borran;
+  los demás se desvinculan de modelos, ventas y encargos sin eliminarlos.
+- Categorías renombradas/borradas reasignan también reglas, datos de carpetas
+  ausentes, subcategorías y clasificación futura. Panel separa ingresos por
+  encargos de ventas. Migración remapea papelera e historial de la instalación.
+- Ficha refrescada al abrir, archivos completos con Ver todos, foto preferida,
+  URLs de miniaturas con revisión, principal persistente, filtros conservados,
+  búsqueda por archivos y sinónimos, contadores sin ocultos, Escape en Abrir con
+  e ideas, errores JSON con registro local y botones recuperados.
+- Cotizador con medidas físicas fiables en mm o últimas medidas, último
+  material y precio arriba; números y abonos validados. Costos antiguos con
+  horas cero usan el reparto inicial con aviso; nuevos costos lo rechazan.
+- Pantalla inicial «Ordenando tu biblioteca...» con avance; búsqueda de
+  repetidos en segundo plano con porcentaje y cancelación.
+
+Pruebas aisladas: `python pruebas/probar_v22.py`,
+`python pruebas/probar_auditoria_v22.py`,
+`node pruebas/probar_interfaz_v22.js` y
+`node pruebas/probar_interfaz_auditoria_v22.js`.
+Los tests de interfaz simulan DOM; no sustituyen una prueba de WebView2.
+
 | Versión | Nombre | Qué trajo |
 |---|---|---|
 | **2.2** | Ordenado y tranquilo | Se elimina conversor manual y automático; selección de archivos existentes por programa con prioridad y respeto del principal, incluido CDR para CorelDRAW. Lectores solo para vistas previas; `_convertidos` queda protegido de escrituras y limpieza. Categorías, filtros y reglas plegables con estado por sección en localStorage y controles de 44 px. Respaldos con `sqlite3.Connection.backup`: uno diario, copia previa a cambios de organización/importación, retención independiente de 30 diarios y 30 cambios solo de esta versión. Restauración con bloqueo de solicitudes, cierre/reapertura de conexión y copia previa para deshacer; copia diaria externa opcional, descargas habilitadas en pywebview. Recuperar papelera usa POST y el indexador excluye carpetas internas a cualquier nivel. Segunda parte: basurero y repetidos solo ocultan, sin mover archivos; papelera solo de recuperación. Arrastre interno de uno o varios modelos (Ctrl+clic) a categorías/subcategorías y orden/traslado de categorías en Ajustes, con respaldo previo. Drop nativo Python DOM de pywebview 5+ para copiar carpetas/archivos a Agregados con confirmación, espacio, progreso en hilo, nombres únicos y rechazo de ejecutables/enlaces. Lectura única de carpeta compartida con indexar.py, índice atómico y miniatura invalidada tras subir/restaurar/copiar/recuperar; tarjeta y ficha se actualizan sin perder la posición. Pruebas aisladas sin dependencias en `pruebas/probar_v22.py`. |

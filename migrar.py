@@ -110,16 +110,23 @@ def traer(desde, hacia):
     """Copia los datos de la instalacion vieja a la nueva.
 
     Ojo con SQLite: si la base quedo en modo WAL, hay cambios en el archivo
-    -wal que NO estan en el .db. Por eso se copian los tres archivos.
+    -wal que NO estan en el .db. La API de respaldo de SQLite los incluye
+    en una copia consistente, sin copiar archivos de una base abierta.
     """
     copiados = []
-    for n in DATOS + ["biblioteca.db-wal", "biblioteca.db-shm"]:
+    for n in DATOS:
         o = os.path.join(desde, n)
         d = os.path.join(hacia, n)
         if not os.path.exists(o):
             continue
         try:
-            shutil.copy2(o, d)
+            if n == "biblioteca.db":
+                import sqlite3
+                from contextlib import closing
+                with closing(sqlite3.connect(o)) as origen, closing(sqlite3.connect(d)) as destino:
+                    origen.backup(destino)
+            else:
+                shutil.copy2(o, d)
             if n in DATOS:
                 copiados.append(n)
         except OSError:
@@ -132,13 +139,28 @@ def traer(desde, hacia):
             import sqlite3
             cx = sqlite3.connect(destino_db)
             estado = cx.execute("PRAGMA integrity_check").fetchone()[0]
-            cx.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            import ntpath
+            vieja = ntpath.normcase(ntpath.normpath(desde)).rstrip("\\")
+            for tabla, campos in (("papelera", ("origen", "destino")), ("versiones", ("respaldo",))):
+                existe = cx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabla,)).fetchone()
+                if not existe:
+                    continue
+                for fila in cx.execute("SELECT id," + ",".join(campos) + " FROM " + tabla).fetchall():
+                    for i, campo in enumerate(campos, 1):
+                        ruta = fila[i]
+                        normal = ntpath.normcase(ntpath.normpath(ruta)) if ruta else ""
+                        if normal == vieja or normal.startswith(vieja + "\\"):
+                            nueva = os.path.join(hacia, ntpath.relpath(ruta, desde).replace("\\", os.sep))
+                            cx.execute("UPDATE " + tabla + " SET " + campo + "=? WHERE id=?", (nueva, fila[0]))
             cx.commit()
+            cx.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             cx.close()
             if estado != "ok":
                 return {"error": "Los datos de la carpeta vieja venian dañados. "
                                  "Se empieza con datos nuevos."}
         except Exception as e:
+            if 'cx' in locals():
+                cx.close()
             return {"error": "No pude leer los datos viejos: %s" % str(e)[:80]}
 
     # las carpetas con archivos que el usuario cargo o borro
