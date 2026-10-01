@@ -14,12 +14,13 @@ NO incluye (son de este PC):
 Uso:   python construir_paquete.py  [carpeta_de_salida]
 Salida: <carpeta>/Biblioteca-Laser.zip   (por defecto en el Escritorio)
 """
-import os, shutil, sys, time
+import os, shutil, sys, time, tempfile, uuid
+import seguridad_archivos
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "Biblioteca-Laser"
 
-INCLUIR = ["app.py", "db.py", "indexar.py", "configuracion.py", "agregados.py", "categorias.py", "actualizar.py",
+INCLUIR = ["app.py", "db.py", "indexar.py", "configuracion.py", "seguridad_archivos.py", "agregados.py", "categorias.py", "actualizar.py",
            "elegir_carpeta.py", "ui.html", "lanzador.py", "migrar.py",
            "crear_acceso.py", "formatos.py", "dxf.py", "eps.py", "svg.py",
            "lbrn.py", "icono.ico",
@@ -30,10 +31,8 @@ INCLUIR = ["app.py", "db.py", "indexar.py", "configuracion.py", "agregados.py", 
 
 
 def build(salida):
-    stage_padre = os.path.join(BASE, "_paquete")
+    stage_padre = tempfile.mkdtemp(prefix=".paquete-", dir=BASE)
     stage = os.path.join(stage_padre, NOMBRE)
-    if os.path.exists(stage_padre):
-        shutil.rmtree(stage_padre)
     os.makedirs(stage)
 
     # la guia corta va con un nombre bien visible
@@ -55,9 +54,10 @@ def build(salida):
     destino_base = os.path.join(salida, NOMBRE)
     zip_final = destino_base + ".zip"
     if os.path.exists(zip_final):
-        os.remove(zip_final)
+        destino_base += "-" + uuid.uuid4().hex
     archivo = shutil.make_archive(destino_base, "zip", root_dir=stage_padre, base_dir=NOMBRE)
-    shutil.rmtree(stage_padre)
+    if seguridad_archivos.dentro(stage_padre, BASE) and seguridad_archivos.arbol_sin_enlaces(stage_padre):
+        shutil.rmtree(stage_padre)
     return archivo
 
 

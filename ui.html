@@ -2033,6 +2033,13 @@ document.getElementById('respaldosCont').addEventListener('click',function(e){
   if(!confirm('¿Volver a esta copia?\n\nLos datos de la app quedarán como estaban en esa fecha. Primero guardaremos cómo está ahora, para que puedas deshacerlo. Tus archivos del disco no se cambian.')) return;
   b.disabled=true; b.textContent='Volviendo...';
   api('/api/respaldos/volver',{archivo:b.dataset.volver}).then(function(r){
+    if(r.confirmar_raices){
+      if(!confirm(r.aviso)){b.disabled=false;b.textContent='Volver';return null}
+      return api('/api/respaldos/volver',{archivo:b.dataset.volver,restaurar_raices:true});
+    }
+    return r;
+  }).then(function(r){
+    if(!r)return;
     if(!r.ok) throw new Error(r.error||'No pude volver a esa copia.');
     actual=null; document.getElementById('velo').classList.remove('on');
     st.cat=''; st.sub='';
@@ -2169,10 +2176,18 @@ function formVenta(v){
   v=v||{};
   var opc=CLIENTES.map(function(c){return '<option value="'+c.id+'"'+(v.cliente_id==c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'}).join('');
   var can=['feria','cliente','local','otro'].map(function(x){return '<option'+(v.canal===x?' selected':'')+'>'+x+'</option>'}).join('');
-  var modelosVenta=MODELOS.filter(function(m){return !m.oculto});
+  var modelosVenta=MODELOS.filter(function(m){return !m.oculto||m.rel===v.rel});
+  if(v.rel&&!modelosVenta.some(function(m){return m.rel===v.rel}))modelosVenta.push({rel:v.rel,n:v.item||v.rel,no_encontrado:true});
   var etiquetas={};modelosVenta.forEach(function(m){etiquetas[m.n]=(etiquetas[m.n]||0)+1});
   function etiqueta(m){return etiquetas[m.n]>1?m.n+' · '+m.rel:m.n}
   var seleccionado=modelosVenta.find(function(m){return m.rel===v.rel});
+  var modeloCambiado=false;
+  function enviarVenta(url,datos){
+    return api(url,datos).then(function(r){
+      if(r.confirmar_stock){datos.devolver_stock_antiguo=confirm(r.aviso);return api(url,datos)}
+      return r;
+    });
+  }
   abrirF2(v.id?'Editar venta':'Registrar venta',
     '<div class="campo"><label class="lb">Qué vendiste</label><input id="v_item" list="lst_modelos" value="'+esc(seleccionado?etiqueta(seleccionado):v.item||'')+'" placeholder="busca entre todos los modelos o escribe otro artículo"><datalist id="lst_modelos">'
       + modelosVenta.map(function(m){return '<option value="'+esc(etiqueta(m))+'">'}).join('')+'</datalist></div>'
@@ -2188,13 +2203,15 @@ function formVenta(v){
       if(!val('v_item'))return toast('Escribe qué vendiste',true);
       var f=val('v_fec'); var ts=f?Math.floor(new Date(f+'T12:00:00').getTime()/1000):hoy();
       var mm=modelosVenta.find(function(m){return etiqueta(m)===val('v_item')});
-      var rel=mm?mm.rel:null;
-      api('/api/venta',{id:v.id,fecha:ts,rel:rel,item:mm?mm.n:val('v_item'),cantidad:numv('v_cant')||1,
+      var rel=modeloCambiado?(mm?mm.rel:null):(v.rel||null);
+      if(!v.id)rel=mm?mm.rel:null;
+      enviarVenta('/api/venta',{id:v.id,fecha:ts,rel:rel,item:mm?mm.n:val('v_item'),cantidad:numv('v_cant')||1,
         precio_unit:numv('v_pre'),costo_unit:numv('v_cos'),canal:val('v_can'),evento:val('v_ev'),
         cliente_id:val('v_cli')||null,notas:val('v_not')})
         .then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta registrada');cargar()}) },
-    v.id?function(){api('/api/venta/borrar',{id:v.id}).then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta eliminada')})}:null);
+    v.id?function(){enviarVenta('/api/venta/borrar',{id:v.id}).then(function(r){VENTAS=r.ventas;pintarVentas();cerrarF2();toast('Venta eliminada');cargar()})}:null);
   document.getElementById('v_item').addEventListener('input',function(){
+    modeloCambiado=true;
     var mm=modelosVenta.find(function(m){return etiqueta(m)===val('v_item')});
     if(mm){document.getElementById('v_pre').value=mm.precio==null?'':mm.precio;document.getElementById('v_cos').value=mm.costo==null?'':mm.costo}
   });

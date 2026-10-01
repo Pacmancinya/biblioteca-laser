@@ -12,7 +12,8 @@ Guarda TODO lo que el usuario edita, sin tocar sus archivos:
 La llave de cada modelo es su RUTA RELATIVA dentro de la biblioteca, así los
 datos sobreviven al re-indexado.
 """
-import os, sqlite3, time, json, threading, math
+import os, sqlite3, time, json, threading, math, uuid
+import seguridad_archivos
 from contextlib import contextmanager
 from functools import wraps
 
@@ -270,6 +271,20 @@ def migrar(cx):
         cx.execute("ALTER TABLE subcats ADD COLUMN orden INTEGER DEFAULT 999")
     if "stock_descontado" not in {r[1] for r in cx.execute("PRAGMA table_info(ventas)").fetchall()}:
         cx.execute("ALTER TABLE ventas ADD COLUMN stock_descontado INTEGER")
+    existentes = {r[1] for r in cx.execute("PRAGMA table_info(versiones)")}
+    for col, tipo in (("permiso_borrado", "INTEGER DEFAULT 0"), ("carpeta_modelo", "TEXT")):
+        if col not in existentes:
+            cx.execute("ALTER TABLE versiones ADD COLUMN " + col + " " + tipo)
+    for tabla in ("modelos", "clientes", "pedidos", "ventas"):
+        if "uid" not in {r[1] for r in cx.execute("PRAGMA table_info(" + tabla + ")")}:
+            cx.execute("ALTER TABLE " + tabla + " ADD COLUMN uid TEXT")
+        for registro in cx.execute("SELECT rowid FROM " + tabla + " WHERE uid IS NULL OR uid=''").fetchall():
+            cx.execute("UPDATE " + tabla + " SET uid=? WHERE rowid=?", (uuid.uuid4().hex, registro[0]))
+        cx.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_" + tabla + "_uid ON " + tabla + "(uid)")
+        # También cubre inserciones SQL de migraciones/importaciones antiguas.
+        cx.execute("CREATE TRIGGER IF NOT EXISTS uid_" + tabla + " AFTER INSERT ON " + tabla +
+                   " WHEN NEW.uid IS NULL OR NEW.uid='' BEGIN UPDATE " + tabla +
+                   " SET uid=lower(hex(randomblob(16))) WHERE rowid=NEW.rowid; END")
     cx.commit()
 
 
@@ -537,11 +552,14 @@ def guardar_venta(d, vid=None):
     anterior = fila("SELECT * FROM ventas WHERE id=?", (vid,)) if vid else None
     if vid and not anterior:
         raise ValueError("No encuentro esa venta.")
-    if anterior and anterior.get("rel"):
-        ejecutar("UPDATE modelos SET stock=COALESCE(stock,0)+? WHERE rel=?",
-                 (anterior["stock_descontado"] if anterior["stock_descontado"] is not None else anterior["cantidad"], anterior["rel"]))
-    descontado = 0
-    if d.get("rel"):
+    if anterior and "rel" not in d:
+        d["rel"] = anterior["rel"]
+    cambia_stock = not anterior or (d.get("rel") or None) != (anterior["rel"] or None) or d["cantidad"] != anterior["cantidad"]
+    if anterior and cambia_stock and anterior.get("rel"):
+        devuelto = devolucion_venta(anterior, d.get("devolver_stock_antiguo"))
+        ejecutar("UPDATE modelos SET stock=COALESCE(stock,0)+? WHERE rel=?", (devuelto, anterior["rel"]))
+    descontado = anterior["stock_descontado"] if anterior and not cambia_stock else 0
+    if cambia_stock and d.get("rel"):
         modelo = meta(d["rel"])
         descontado = min(int((modelo or {}).get("stock") or 0), d["cantidad"])
         # Una sola operación SQL, bajo el mismo lock/transacción que la venta.
@@ -559,12 +577,21 @@ def guardar_venta(d, vid=None):
     return vid
 
 @atomico
-def borrar_venta(vid):
+def borrar_venta(vid, devolver_stock_antiguo=None):
     anterior = fila("SELECT * FROM ventas WHERE id=?", (vid,))
     if anterior and anterior.get("rel"):
         ejecutar("UPDATE modelos SET stock=COALESCE(stock,0)+? WHERE rel=?",
-                 (anterior["stock_descontado"] if anterior["stock_descontado"] is not None else anterior["cantidad"], anterior["rel"]))
+                 (devolucion_venta(anterior, devolver_stock_antiguo), anterior["rel"]))
     ejecutar("DELETE FROM ventas WHERE id=?", (vid,))
+
+
+def devolucion_venta(venta, decision=None):
+    if venta["stock_descontado"] is not None:
+        return venta["stock_descontado"]
+    # Nunca inferir un descuento a partir de la cantidad histórica.
+    if decision is not None and type(decision) is not bool:
+        raise ValueError("Elige sí o no para devolver el stock de la venta antigua.")
+    return venta["cantidad"] if decision is True else 0
 
 
 @exclusivo
@@ -610,16 +637,17 @@ def metricas():
 # ---------------------------------------------------------------- versiones
 MAX_VERSIONES = 3
 
-def registrar_version(rel, tipo, archivo, respaldo):
-    ejecutar("INSERT INTO versiones (rel,tipo,archivo,respaldo,fecha) VALUES (?,?,?,?,?)",
-             (rel, tipo, archivo, respaldo, int(time.time())))
+@exclusivo
+def registrar_version(rel, tipo, archivo, respaldo, carpeta_modelo=None):
+    ejecutar("INSERT INTO versiones (rel,tipo,archivo,respaldo,fecha,permiso_borrado,carpeta_modelo) VALUES (?,?,?,?,?,?,?)",
+             (rel, tipo, archivo, respaldo, int(time.time()), int(bool(carpeta_modelo)), carpeta_modelo))
     # deja solo las últimas MAX_VERSIONES; borra del disco las que sobran
     viejas = filas("""SELECT * FROM versiones WHERE rel=? AND tipo=?
-                      ORDER BY fecha DESC LIMIT -1 OFFSET ?""", (rel, tipo, MAX_VERSIONES))
+                      ORDER BY fecha DESC,id DESC LIMIT -1 OFFSET ?""", (rel, tipo, MAX_VERSIONES))
     for v in viejas:
         try:
-            protegido = "_convertidos" in os.path.normpath(v["respaldo"] or "").replace("\\", "/").lower().split("/")
-            if tipo != "convertido" and not protegido and v["respaldo"] and os.path.exists(v["respaldo"]):
+            carpeta = v.get("carpeta_modelo")
+            if carpeta_modelo and carpeta and os.path.normcase(os.path.realpath(carpeta)) == os.path.normcase(os.path.realpath(carpeta_modelo)) and seguridad_archivos.version_propia(v, carpeta_modelo):
                 os.remove(v["respaldo"])
         except OSError:
             pass

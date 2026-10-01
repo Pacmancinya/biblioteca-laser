@@ -34,6 +34,8 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import tempfile
+import uuid
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 NOMBRE = "Biblioteca Laser"
@@ -41,7 +43,7 @@ NOMBRE = "Biblioteca Laser"
 GUIA = "empezar_aqui.txt"        # la guia corta que ve primero el usuario
 
 # lo que va SUELTO al lado del exe (se puede actualizar)
-APP = ["app.py", "db.py", "indexar.py", "configuracion.py", "agregados.py", "categorias.py", "formatos.py",
+APP = ["app.py", "db.py", "indexar.py", "configuracion.py", "seguridad_archivos.py", "agregados.py", "categorias.py", "formatos.py",
        "dxf.py", "eps.py", "svg.py", "lbrn.py", "actualizar.py",
        "elegir_carpeta.py", "migrar.py", "ui.html", "LEEME.txt", "icono.ico"]
 
@@ -68,9 +70,7 @@ def build(salida):
     if not revisar():
         return 1
 
-    trabajo = os.path.join(BASE, "_exe")
-    if os.path.exists(trabajo):
-        shutil.rmtree(trabajo)
+    trabajo = tempfile.mkdtemp(prefix=".exe-", dir=BASE)
 
     print("Compilando el programa (esto demora un par de minutos)...")
     cmd = [
@@ -114,7 +114,7 @@ def build(salida):
     os.makedirs(salida, exist_ok=True)
     zip_final = os.path.join(salida, "Biblioteca-Laser-programa.zip")
     if os.path.exists(zip_final):
-        os.remove(zip_final)
+        zip_final = os.path.join(salida, "Biblioteca-Laser-programa-" + uuid.uuid4().hex + ".zip")
 
     print("Armando el ZIP...")
     total = 0

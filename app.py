@@ -22,6 +22,7 @@ import formatos
 import indexar
 import agregados
 import configuracion
+import seguridad_archivos
 
 CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
 
@@ -78,6 +79,8 @@ _MEDIDAS = {}
 
 def aplicar_preferencias(m):
     mt = db.meta(m["rel"]) or {}
+    if mt and not metadatos_corresponden(m, mt):
+        return m
     foto = mt.get("foto_preferida")
     if foto and foto in m["archivos"]["imagen"]:
         m["preview"] = foto
@@ -323,7 +326,7 @@ def error_ruta(p, carpeta=False):
 def recordar_rutas():
     for rel, mt in db.meta_todos().items():
         m = POR_REL.get(rel)
-        if m and not mt.get("ruta_guardada"):
+        if m and not mt.get("ruta_guardada") and not mt.get("no_encontrado") and ruta_segura(m["ruta"]):
             db.guardar_meta(rel, {"ruta_guardada": m["ruta"]})
 
 
@@ -331,9 +334,29 @@ def recordar_rutas():
 def detectar_no_encontrados():
     for rel, mt in db.meta_todos().items():
         m = POR_REL.get(rel)
-        guardada = mt.get("ruta_guardada")
-        falta = not m or bool(guardada and os.path.normcase(os.path.realpath(guardada)) != os.path.normcase(os.path.realpath(m["ruta"])))
-        db.guardar_meta(rel, {"no_encontrado": int(falta)})
+        falta = not m or not metadatos_corresponden(m, mt)
+        if int(bool(mt.get("no_encontrado"))) != int(falta):
+            db.guardar_meta(rel, {"no_encontrado": int(falta)})
+
+
+def metadatos_corresponden(m, mt):
+    guardada = mt.get("ruta_guardada")
+    return bool(m and guardada and os.path.isdir(m["ruta"]) and ruta_segura(m["ruta"])
+                and os.path.normcase(os.path.realpath(guardada)) == os.path.normcase(os.path.realpath(m["ruta"])))
+
+
+def meta_asociada(rel):
+    mt = db.meta(rel) or {}
+    return mt if metadatos_corresponden(POR_REL.get(rel), mt) else {}
+
+
+def guardar_meta_modelo(rel, campos):
+    """Las ediciones locales nuevas recuerdan su carpeta desde la primera escritura."""
+    campos = dict(campos)
+    m = POR_REL.get(rel)
+    if m and not db.meta(rel):
+        campos["ruta_guardada"] = m["ruta"]
+    db.guardar_meta(rel, campos)
 
 
 def no_encontrados():
@@ -439,11 +462,14 @@ def modelo_vista(m, metas=None):
     """
     metas = metas if metas is not None else db.meta_todos()
     mt = metas.get(m["rel"]) or {}
+    sin_asociar = bool(mt and not metadatos_corresponden(m, mt))
+    if sin_asociar:
+        mt = {}
     partes = m["ruta_partes"]
 
     cat = mt.get("categoria")
     sub = mt.get("subcategoria")
-    if not cat:
+    if not cat and not sin_asociar:
         r = regla_de(m["rel"])
         if r:
             cat = r[0]
@@ -466,7 +492,7 @@ def modelo_vista(m, metas=None):
                              for a in m["archivos"]["corte"])) else 0,
         "lb": 1 if m["tiene_lightburn"] else 0, "d3": 1 if m["tiene_3d"] else 0,
         "fav": 1 if mt.get("favorito") else 0,
-        "oculto": 1 if mt.get("oculto") or mt.get("no_encontrado") else 0,
+        "oculto": 1 if sin_asociar or mt.get("oculto") or mt.get("no_encontrado") else 0,
         "revision": str(m.get("mtime", 0)) + "-" + str(mt.get("actualizado", 0)) + "-" + str(_REVISIONES.get(m["rel"], 0)),
         "archivos_busqueda": " ".join(a for grupo in m["archivos"].values() for a in grupo),
         "costo": mt.get("costo"), "precio": mt.get("precio"), "stock": mt.get("stock") or 0,
@@ -614,7 +640,7 @@ def borrar_categoria(nombre, destino=""):
         destinos[nombre] = destino
         db.guardar_ajuste("categoria_destinos", json.dumps(destinos, ensure_ascii=False))
     for v in afectados:
-        db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": ""})
+        guardar_meta_modelo(v["rel"], {"categoria": destino, "subcategoria": ""})
     # y las reglas de carpeta que apuntaban ahi
     for r in db.reglas_carpeta():
         if r["categoria"] == nombre:
@@ -649,7 +675,7 @@ def renombrar_categoria(viejo, nuevo):
         destinos[viejo] = nuevo
         db.guardar_ajuste("categoria_destinos", json.dumps(destinos, ensure_ascii=False))
     for v in afectados:
-        db.guardar_meta(v["rel"], {"categoria": nuevo})
+        guardar_meta_modelo(v["rel"], {"categoria": nuevo})
     for r in db.reglas_carpeta():
         if r["categoria"] == viejo:
             db.guardar_regla(r["rel"], nuevo, r["subcategoria"])
@@ -774,7 +800,7 @@ def hacer_principal(rel, nombre):
     m["tiene_lightburn"] = any(f.lower().endswith((".lbrn", ".lbrn2")) for f in corte)
     guardar_indice()
 
-    db.guardar_meta(rel, {"principal": nombre})
+    guardar_meta_modelo(rel, {"principal": nombre})
     db.registrar_version(rel, "principal", nombre, "")
 
     # la vista previa vieja ya no vale
@@ -782,7 +808,7 @@ def hacer_principal(rel, nombre):
         h = hashlib.md5(rel.encode("utf-8")).hexdigest()
         thumb = os.path.join(CACHE_THUMBS, h + ".jpg")
         if os.path.exists(thumb):
-            os.remove(thumb)
+            retirar_miniatura(thumb)
     except OSError:
         pass
     _VIGILADOS.pop(rel, None)
@@ -822,7 +848,7 @@ def renombrar_subcat(cat, vieja, nueva):
         return {"ok": True, "movidos": 0}
     afectados = modelos_en(cat, vieja)
     for v in afectados:
-        db.guardar_meta(v["rel"], {"categoria": cat, "subcategoria": nueva})
+        guardar_meta_modelo(v["rel"], {"categoria": cat, "subcategoria": nueva})
     db.quitar_subcat(cat, vieja)
     db.crear_subcat(cat, nueva)
     # si el nombre viejo sale solo al leer la carpeta, hay que taparlo
@@ -841,7 +867,7 @@ def borrar_subcat(cat, sub, destino=""):
     destino = (destino or "").strip()
     afectados = modelos_en(cat, sub)
     for v in afectados:
-        db.guardar_meta(v["rel"], {"categoria": cat, "subcategoria": destino})
+        guardar_meta_modelo(v["rel"], {"categoria": cat, "subcategoria": destino})
     db.quitar_subcat(cat, sub)
     # Solo hay que taparla si la inventa el programa; si la creó el usuario,
     # con quitarla basta y no dejamos basura guardada.
@@ -865,7 +891,7 @@ def asignar_modelos(rels, categoria, subcategoria=""):
     if not grupo or (subcategoria and subcategoria not in [s["nombre"] for s in grupo["subs"]]):
         return {"error": "Elige una categoría o subcategoría existente."}
     for rel in set(rels):
-        db.guardar_meta(rel, {"categoria": categoria, "subcategoria": subcategoria})
+        guardar_meta_modelo(rel, {"categoria": categoria, "subcategoria": subcategoria})
     return {"ok": True, "aviso": "Listo. Si no te gusta, Respaldo -> Volver a como estaba."}
 
 
@@ -887,7 +913,7 @@ def trasladar_subcategoria(categoria, subcategoria, destino):
     if categoria == destino:
         return {"ok": True}
     for v in modelos_en(categoria, subcategoria):
-        db.guardar_meta(v["rel"], {"categoria": destino, "subcategoria": subcategoria})
+        guardar_meta_modelo(v["rel"], {"categoria": destino, "subcategoria": subcategoria})
     for regla in db.reglas_carpeta():
         if regla["categoria"] == categoria and regla["subcategoria"] == subcategoria:
             db.guardar_regla(regla["rel"], destino, subcategoria)
@@ -912,12 +938,19 @@ def quitar_regla(rel):
 
 @cambio_organizacion(lambda rel: "Antes de ocultar o volver a mostrar el modelo " + str(rel))
 def alternar_modelo_oculto(rel):
+    guardar_meta_modelo(rel, {})
     return {"ok": True, "oculto": db.alternar_oculto(rel)}
 
 
 @db.exclusivo
 def guardar_edicion(rel, campos):
     viejo = db.meta(rel) or {}
+    m = POR_REL.get(rel)
+    if viejo and (viejo.get("no_encontrado") or not metadatos_corresponden(m, viejo)):
+        return {"error": "Los datos de este modelo pertenecen a otra carpeta. Revísalos en Limpieza."}
+    campos = dict(campos)
+    if m and not viejo:
+        campos["ruta_guardada"] = m["ruta"]
     if any(k in campos and campos[k] != viejo.get(k) for k in ("categoria", "subcategoria", "oculto")):
         res = respaldar_base("Antes de cambiar la categoría o visibilidad del modelo " + str(rel))
         if not res.get("ok"):
@@ -973,7 +1006,7 @@ def miniatura(rel):
     lbrn = None
     dibujo = None
     if not origen or not os.path.exists(origen):
-        principal = (db.meta(rel) or {}).get("principal")
+        principal = meta_asociada(rel).get("principal")
         if principal and principal in m["archivos"]["corte"]:
             p = os.path.join(m["ruta"], principal)
             ext = os.path.splitext(principal)[1].lower()
@@ -1017,7 +1050,7 @@ def miniatura(rel):
                 if not res.get("ok"):
                     return None
                 im = Image.open(destino + ".png").convert("RGB")
-                os.remove(destino + ".png")
+                retirar_miniatura(destino + ".png")
             else:
                 im = Image.open(origen).convert("RGB")
             im.thumbnail((520, 520), Image.LANCZOS)
@@ -1063,6 +1096,8 @@ def miniatura_lightburn(origen, destino):
 def ruta_respaldo(carpeta, nombre):
     """Nombre único dentro de _versiones_anteriores (nunca pisa un respaldo previo)."""
     vers = os.path.join(carpeta, CARPETA_VERSIONES)
+    if not seguridad_archivos.sin_enlaces(vers) or not seguridad_archivos.dentro(vers, carpeta):
+        raise OSError("La carpeta de historial es un enlace o no pertenece al modelo.")
     os.makedirs(vers, exist_ok=True)
     base, ext = os.path.splitext(nombre)
     marca = time.strftime("%Y%m%d-%H%M%S")
@@ -1082,6 +1117,8 @@ def guardar_archivo(rel, tipo, nombre, datos):
     if not m:
         return {"error": "modelo no encontrado"}
     carpeta = m["ruta"]
+    if not seguridad_archivos.sin_enlaces(carpeta):
+        return {"error": "La carpeta de este modelo es un enlace. No se modificó ningún archivo."}
     if es_convertidos(carpeta):
         return {"error": "Los trabajos de _convertidos se conservan tal como están. Guarda el archivo en otra carpeta de modelos."}
     if not ruta_segura(carpeta):
@@ -1107,7 +1144,7 @@ def guardar_archivo(rel, tipo, nombre, datos):
                 return {"error": "Ese nombre corresponde a una carpeta o enlace. Elige otro nombre."}
             respaldo = ruta_respaldo(carpeta, nombre)
             shutil.copy2(destino, respaldo)
-            db.registrar_version(rel, tipo, nombre, respaldo)
+            db.registrar_version(rel, tipo, nombre, respaldo, carpeta)
         fd, temporal = tempfile.mkstemp(prefix=".carga-", dir=carpeta)
         with os.fdopen(fd, "wb") as f:
             f.write(datos)
@@ -1115,13 +1152,13 @@ def guardar_archivo(rel, tipo, nombre, datos):
             os.fsync(f.fileno())
         os.replace(temporal, destino)
         if tipo == "imagen":
-            db.guardar_meta(rel, {"foto_preferida": nombre})
+            guardar_meta_modelo(rel, {"foto_preferida": nombre})
         elif tipo == "manual":
-            db.guardar_meta(rel, {"manual_preferido": nombre})
+            guardar_meta_modelo(rel, {"manual_preferido": nombre})
     except OSError as e:
         return {"error": "No pude guardar el archivo. La versión anterior se conserva: %s" % e}
     finally:
-        if temporal and os.path.exists(temporal):
+        if temporal and seguridad_archivos.archivo_propio(temporal, carpeta, r"\.carga-[a-z0-9_]+"):
             os.remove(temporal)
     try:
         recargar_parcial(rel)
@@ -1150,7 +1187,7 @@ def borrar_modelo(rel):
         return {"error": "modelo no encontrado"}
     if es_convertidos(m["ruta"]):
         return {"error": "Los trabajos de _convertidos se conservan."}
-    db.guardar_meta(rel, {"oculto": 1})
+    guardar_meta_modelo(rel, {"oculto": 1})
     return {"ok": True, "oculto": 1, "aviso": MENSAJE_OCULTO}
 
 
@@ -1162,12 +1199,11 @@ def restaurar_papelera(pid):
     if es_convertidos(it["origen"]) or es_convertidos(it["destino"]):
         return {"error": "Los trabajos de _convertidos se conservan tal como están."}
     try:
-        papelera = os.path.normcase(os.path.realpath(PAPELERA))
-        origen_guardado = os.path.normcase(os.path.realpath(it["destino"]))
-        dentro = os.path.commonpath([papelera, origen_guardado]) == papelera
+        dentro = (seguridad_archivos.dentro(it["destino"], PAPELERA)
+                  and seguridad_archivos.arbol_sin_enlaces(it["destino"]))
     except (ValueError, TypeError):
         dentro = False
-    if not dentro or not ruta_segura(it["origen"]):
+    if not dentro or not ruta_segura(it["origen"]) or not seguridad_archivos.sin_enlaces(it["origen"]):
         return {"error": "No encuentro este archivo dentro de la papelera y tus carpetas de modelos. Revisa las carpetas en Ajustes."}
     if not os.path.exists(it["destino"]):
         return {"error": "el archivo ya no está en la papelera"}
@@ -1745,13 +1781,13 @@ def carpeta_respaldos():
 def listar_respaldos(carpeta=None):
     carpeta = carpeta or carpeta_respaldos()
     salida = []
-    if not os.path.isdir(carpeta):
+    if not os.path.isdir(carpeta) or not seguridad_archivos.sin_enlaces(carpeta):
         return salida
     for nombre in os.listdir(carpeta):
         match = _NOMBRE_RESPALDO.fullmatch(nombre)
         ruta = os.path.join(carpeta, nombre)
         ficha = ruta + ".json"
-        if not match or not os.path.isfile(ruta) or os.path.islink(ruta) or os.path.islink(ficha):
+        if not match or not seguridad_archivos.archivo_propio(ruta, carpeta, _NOMBRE_RESPALDO.pattern) or not seguridad_archivos.archivo_propio(ficha, carpeta, _NOMBRE_RESPALDO.pattern.rstrip("$") + r"\.json"):
             continue
         try:
             with open(ficha, encoding="utf-8") as f:
@@ -1768,14 +1804,17 @@ def listar_respaldos(carpeta=None):
 
 def limitar_respaldos(carpeta=None):
     carpeta = carpeta or carpeta_respaldos()
+    if ruta_segura(carpeta) and os.path.basename(os.path.normpath(carpeta)).lower() != "respaldos":
+        return  # Nunca limpiar directamente una carpeta de dibujos del usuario.
     lista = listar_respaldos(carpeta)
     for tipo in ("diario", "cambio"):
         propios = [x for x in lista if x["tipo"] == tipo]
         for viejo in propios[30:]:
             ruta = os.path.join(carpeta, viejo["archivo"])
             try:
-                os.remove(ruta)
-                os.remove(ruta + ".json")
+                if seguridad_archivos.archivo_propio(ruta, carpeta, _NOMBRE_RESPALDO.pattern) and seguridad_archivos.archivo_propio(ruta + ".json", carpeta, _NOMBRE_RESPALDO.pattern.rstrip("$") + r"\.json"):
+                    os.remove(ruta)
+                    os.remove(ruta + ".json")
             except OSError:
                 pass
 
@@ -1789,9 +1828,13 @@ def respaldar_base(descripcion="Antes de cambiar el orden de la biblioteca", tip
     nombre = "bl-v22-%s-%s-%s.db" % (tipo, ahora.strftime("%Y%m%d-%H%M%S%f"), uuid.uuid4().hex)
     destino = os.path.join(carpeta_respaldos(), nombre)
     dato = {"marca": MARCA_RESPALDO, "archivo": nombre, "tipo": tipo,
-            "fecha": ahora.isoformat(timespec="microseconds"), "descripcion": descripcion}
+            "fecha": ahora.isoformat(timespec="microseconds"), "descripcion": descripcion,
+            "raices": configuracion_raices()}
     try:
+        if not seguridad_archivos.sin_enlaces(carpeta_respaldos()):
+            raise OSError("La carpeta de respaldos es un enlace.")
         os.makedirs(carpeta_respaldos(), exist_ok=True)
+        recordar_rutas()
         with closing(sqlite3.connect(destino)) as copia:
             db.cx().backup(copia)
         with open(destino + ".json", "x", encoding="utf-8") as f:
@@ -1799,7 +1842,9 @@ def respaldar_base(descripcion="Antes de cambiar el orden de la biblioteca", tip
     except Exception:
         for p in (destino, destino + ".json"):
             try:
-                os.remove(p)
+                patron = _NOMBRE_RESPALDO.pattern if p == destino else _NOMBRE_RESPALDO.pattern.rstrip("$") + r"\.json"
+                if seguridad_archivos.archivo_propio(p, carpeta_respaldos(), patron):
+                    os.remove(p)
             except OSError:
                 pass
         return {"error": "No pude guardar la copia de seguridad. No se cambió tu biblioteca. Revisa que haya espacio en el disco."}
@@ -1844,13 +1889,25 @@ def respaldo_diario():
 
 
 @db.exclusivo
-def volver_respaldo(nombre):
+def volver_respaldo(nombre, restaurar_raices=False):
     global AVISO_RESPALDO
     dato = next((x for x in listar_respaldos() if x["archivo"] == nombre), None)
     if not dato:
         return {"error": "No encuentro esa copia. Elige otra de la lista."}
+    actuales = configuracion_raices()
+    guardadas = dato.get("raices")
+    if guardadas is not None and (not isinstance(guardadas, dict) or not isinstance(guardadas.get("biblioteca"), str)
+                                 or not isinstance(guardadas.get("bibliotecas_extra"), list)
+                                 or any(not isinstance(x, str) for x in guardadas["bibliotecas_extra"])):
+        return {"error": "La copia tiene una configuración de carpetas inválida."}
+    diferentes = guardadas is not None and normalizar_raices(guardadas) != normalizar_raices(actuales)
+    if diferentes and restaurar_raices is not True:
+        return {"confirmar_raices": True, "raices": guardadas,
+                "aviso": "Esta copia usaba otras carpetas de modelos:\n" + "\n".join([guardadas["biblioteca"]] + guardadas["bibliotecas_extra"]) +
+                         "\n\n¿Volver también a esas carpetas y buscar sus modelos? Cancelar conserva tu biblioteca actual."}
     origen = None
     previo = None
+    indice_previo = cargar_indice()
     try:
         from pathlib import Path
         origen = sqlite3.connect(Path(os.path.join(carpeta_respaldos(), nombre)).as_uri() + "?mode=ro", uri=True)
@@ -1884,7 +1941,16 @@ def volver_respaldo(nombre):
             raise
         finally:
             db.cx()
-        recargar()
+        if diferentes:
+            guardar_config(guardadas)
+            # No recordar rutas contra el índice de la carpeta que acabamos de abandonar.
+            indexar.CONFIG, indexar.SALIDA = CONFIG, INDICE
+            if all(os.path.isdir(x) for x in ([guardadas["biblioteca"]] + guardadas["bibliotecas_extra"]) if x):
+                indexar.indexar()
+            else:
+                indexar.guardar_json_atomico(INDICE, dict(VACIO))
+        recargar(verificar_estricto=True)
+        detectar_no_encontrados()
         _VIGILADOS.clear()
         AVISO_RESPALDO = ""
         fecha = datetime.fromisoformat(dato["fecha"]).strftime("%d-%m-%Y a las %H:%M")
@@ -1893,10 +1959,30 @@ def volver_respaldo(nombre):
     except Exception:
         if previo is None:
             return {"error": "No pude abrir esa copia. Tu biblioteca sigue como estaba. Elige otra de la lista."}
+        if previo.get("ok"):
+            try:
+                db.cerrar()
+                with closing(sqlite3.connect(previo["archivo"])) as segura, closing(sqlite3.connect(db.DB_PATH)) as destino:
+                    segura.backup(destino)
+                if diferentes:
+                    guardar_config(actuales)
+                    indexar.guardar_json_atomico(INDICE, indice_previo)
+                recargar(verificar_estricto=True)
+            except Exception:
+                pass  # La copia previa permanece disponible incluso ante un disco lleno.
         return {"error": "No pude volver a esa copia. Tus datos actuales siguen guardados en la copia previa."}
     finally:
         if origen is not None:
             origen.close()
+
+
+def configuracion_raices():
+    cfg = cargar_config()
+    return {"biblioteca": cfg.get("biblioteca") or "", "bibliotecas_extra": list(cfg.get("bibliotecas_extra") or [])}
+
+
+def normalizar_raices(cfg):
+    return [os.path.normcase(os.path.realpath(x)) if x else "" for x in [cfg["biblioteca"]] + cfg["bibliotecas_extra"]]
 
 
 @cambio_organizacion("Antes de cargar un respaldo")
@@ -1917,6 +2003,7 @@ def importar_datos(datos, modo="fusionar"):
                 for tabla in tablas + ("ajustes", "importaciones"):
                     c.execute("DELETE FROM " + tabla)
             mapa_cli = {}
+            mapa_rel = {}
             for tabla in tablas:
                 usados = set()
                 registros = datos.get(tabla, [])
@@ -1927,29 +2014,41 @@ def importar_datos(datos, modo="fusionar"):
                     if not isinstance(registro, dict):
                         raise ValueError("Hay un registro inválido en " + tabla)
                     d = {k: v for k, v in registro.items() if k in columnas and k != "id"}
+                    if "uid" in d and (not isinstance(d["uid"], str) or not d["uid"]):
+                        d.pop("uid")
                     viejo = registro.get("id")
                     if "cliente_id" in d:
                         d["cliente_id"] = mapa_cli.get(str(d["cliente_id"]))
+                    if tabla != "modelos" and d.get("rel") in mapa_rel:
+                        d["rel"] = mapa_rel[d["rel"]]
                     if tabla in ("versiones", "papelera"):
                         for campo in ("origen", "destino", "respaldo"):
                             if d.get(campo):
                                 d[campo] = remapear_ruta(d[campo], datos.get("base_origen"), BASE)
+                        if tabla == "versiones":
+                            d["permiso_borrado"] = 0
+                            d["carpeta_modelo"] = None
                     if tabla == "modelos":
                         if not d.get("rel"):
                             raise ValueError("Un modelo del respaldo no tiene carpeta.")
+                        local = c.execute("SELECT rel FROM modelos WHERE uid=?", (d.get("uid"),)).fetchone() if d.get("uid") else None
+                        mapa_rel[d["rel"]] = local[0] if local and modo == "fusionar" else d["rel"]
                         # La carpeta se vuelve a comprobar en esta instalación.
                         m = POR_REL.get(d["rel"])
-                        if m:
+                        if m and not d.get("ruta_guardada") and datos.get("formato_version", 1) < 3:
                             d["ruta_guardada"] = m["ruta"]
                             d["no_encontrado"] = 0
                     clave = str(viejo) if viejo is not None else hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()
                     existente = None
                     if "id" in columnas:
+                        uid = d.get("uid") if tabla in ("clientes", "pedidos", "ventas") else None
+                        if uid:
+                            existente = c.execute("SELECT id FROM " + tabla + " WHERE uid=?", (uid,)).fetchone()
                         marca = c.execute("SELECT id_local FROM importaciones WHERE origen=? AND tabla=? AND id_original=?",
                                           (origen, tabla, clave)).fetchone()
-                        if marca:
+                        if marca and not uid:
                             existente = c.execute("SELECT id FROM " + tabla + " WHERE id=?", (marca[0],)).fetchone()
-                        if not existente and d:
+                        if not existente and d and not uid:
                             # Reconoce registros locales que ya formaban parte del respaldo.
                             condiciones = " AND ".join(k + " IS ?" for k in d)
                             coincidencias = c.execute("SELECT id FROM " + tabla + " WHERE " + condiciones, list(d.values())).fetchall()
@@ -1970,6 +2069,8 @@ def importar_datos(datos, modo="fusionar"):
                         if any(not d.get(k) for k in keys):
                             raise ValueError("Falta un nombre o carpeta en " + tabla)
                         existe = c.execute("SELECT 1 FROM " + tabla + " WHERE " + " AND ".join(k + "=?" for k in keys), [d[k] for k in keys]).fetchone()
+                        if tabla == "modelos" and d.get("uid"):
+                            existe = existe or c.execute("SELECT 1 FROM modelos WHERE uid=?", (d["uid"],)).fetchone()
                         if existe and modo == "fusionar":
                             continue
                         campos = ",".join(d)
@@ -1979,7 +2080,7 @@ def importar_datos(datos, modo="fusionar"):
             if not isinstance(ajustes, dict):
                 raise ValueError("Los ajustes del respaldo no son válidos.")
             for k, v in ajustes.items():
-                if k != "respaldo_origen":
+                if k != "respaldo_origen" and (modo != "fusionar" or not db.fila("SELECT clave FROM ajustes WHERE clave=?", (k,))):
                     db.guardar_ajuste(k, v)
             detectar_no_encontrados()
         recargar_reglas()
@@ -2211,7 +2312,8 @@ class Handler(BaseHTTPRequestHandler):
                         if _MEDIDAS[clave]:
                             d["medidas_mm"] = _MEDIDAS[clave]
                             break
-            d["meta"] = db.meta(rel) or {}
+            mt = db.meta(rel) or {}
+            d["meta"] = mt if not mt or metadatos_corresponden(m, mt) else {}
             d["versiones"] = db.versiones(rel)
             # con qué programa se abre cada archivo (por su extensión)
             progs = {}
@@ -2293,7 +2395,7 @@ class Handler(BaseHTTPRequestHandler):
             if mensaje:
                 return self._send(404, {"error": mensaje})
 
-            elegido = archivo_para_programa(m, cual, (db.meta(rel) or {}).get("principal", ""))
+            elegido = archivo_para_programa(m, cual, meta_asociada(rel).get("principal", ""))
             if not elegido:
                 return self._send(400, {"error": "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + "."})
             ruta = os.path.join(m["ruta"], elegido)
@@ -2448,6 +2550,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/favorito":
             rel = self._json().get("rel", "")
+            guardar_meta_modelo(rel, {})
             if not rel or rel not in POR_REL:
                 return self._send(400, {"error": "modelo no válido"})
             return self._send(200, {"ok": True, "favorito": db.alternar_favorito(rel)})
@@ -2474,11 +2577,19 @@ class Handler(BaseHTTPRequestHandler):
 
         if r == "/api/venta":
             d = self._json()
+            anterior = db.fila("SELECT * FROM ventas WHERE id=?", (d.get("id"),))
+            if anterior and anterior.get("rel") and anterior["stock_descontado"] is None and "devolver_stock_antiguo" not in d and (
+                    (d.get("rel", anterior["rel"]) or None) != (anterior["rel"] or None) or db.numero(d.get("cantidad"), "cantidad", 1, entero=True) != anterior["cantidad"]):
+                return self._send(200, aviso_stock_antiguo(anterior))
             vid = db.guardar_venta(d, d.get("id"))
             return self._send(200, {"ok": True, "id": vid, "ventas": db.ventas()})
 
         if r == "/api/venta/borrar":
-            db.borrar_venta(self._json().get("id"))
+            d = self._json()
+            anterior = db.fila("SELECT * FROM ventas WHERE id=?", (d.get("id"),))
+            if anterior and anterior.get("rel") and anterior["stock_descontado"] is None and "devolver_stock_antiguo" not in d:
+                return self._send(200, aviso_stock_antiguo(anterior))
+            db.borrar_venta(d.get("id"), d.get("devolver_stock_antiguo"))
             return self._send(200, {"ok": True, "ventas": db.ventas()})
 
         if r == "/api/subir":
@@ -2701,8 +2812,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if res.get("ok") else 400, res)
 
         if r == "/api/respaldos/volver":
-            res = volver_respaldo(self._json().get("archivo", ""))
-            return self._send(200 if res.get("ok") else 400, res)
+            d = self._json()
+            res = volver_respaldo(d.get("archivo", ""), d.get("restaurar_raices", False))
+            return self._send(200 if res.get("ok") or res.get("confirmar_raices") else 400, res)
 
         if r == "/api/respaldos/carpeta":
             d = self._json()
@@ -2748,7 +2860,16 @@ def invalidar_miniatura(rel):
     _REVISIONES[rel] = time.time_ns()
     thumb = os.path.join(CACHE_THUMBS, hashlib.md5(rel.encode("utf-8")).hexdigest() + ".jpg")
     if os.path.isfile(thumb):
-        os.remove(thumb)
+        retirar_miniatura(thumb)
+
+
+def retirar_miniatura(ruta):
+    if seguridad_archivos.archivo_propio(ruta, CACHE_THUMBS, r"[a-f0-9]{32}\.jpg(?:\.png)?"):
+        os.remove(ruta)
+
+
+def aviso_stock_antiguo(venta):
+    return {"confirmar_stock": True, "aviso": "Esta venta es anterior a la versión 2.2: no sé cuánto stock descontó. ¿Quieres devolver %s unidades al stock?" % venta["cantidad"]}
 
 
 def _releer_carpeta(ruta):
@@ -2818,7 +2939,7 @@ def reordenar_si_hace_falta(avance=None):
     return True
 
 
-def recargar():
+def recargar(verificar_estricto=False):
     """Vuelve a leer el indice y la configuracion desde el disco.
     Se usa cuando algo cambio por fuera (por ejemplo al traer los datos de
     una instalacion anterior)."""
@@ -2828,6 +2949,9 @@ def recargar():
     RAIZ = DATOS.get("raiz", "")
     MODELOS = DATOS.get("modelos", [])
     POR_REL = {m["rel"]: m for m in MODELOS}
+    if not verificar_estricto:
+        recordar_rutas()
+    detectar_no_encontrados()
     for m in MODELOS:
         aplicar_preferencias(m)
     recargar_reglas()
@@ -2840,6 +2964,8 @@ def preparar(avisar=None):
     di = avisar or (lambda t: None)
     di("Abriendo tus datos...")
     db.cx()
+    recordar_rutas()
+    detectar_no_encontrados()
     db.sembrar_costos()
     if not MODELOS and cargar_config().get("biblioteca"):
         listo, error = indexar_ahora(avance=di)

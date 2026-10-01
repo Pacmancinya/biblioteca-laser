@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import threading
+import seguridad_archivos
 
 LOCK = threading.RLock()
 
@@ -35,6 +36,6 @@ def modificar(ruta, cambios):
                 os.fsync(archivo.fileno())
             os.replace(temporal, ruta)
         finally:
-            if os.path.exists(temporal):
+            if seguridad_archivos.archivo_propio(temporal, os.path.dirname(os.path.abspath(ruta)), r"\.config-[a-z0-9_]+"):
                 os.remove(temporal)
         return dato

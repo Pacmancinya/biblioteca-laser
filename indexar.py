@@ -196,6 +196,7 @@ def leer_modelo(dirpath, carpeta_base, marca="", identificador=0, padres=None):
 def guardar_json_atomico(ruta, datos):
     """Un fallo deja el índice anterior entero; el temporal vive en el mismo disco."""
     import tempfile
+    import seguridad_archivos
     fd, temporal = tempfile.mkstemp(prefix=".indice-", dir=os.path.dirname(os.path.abspath(ruta)))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -204,7 +205,7 @@ def guardar_json_atomico(ruta, datos):
             os.fsync(f.fileno())
         os.replace(temporal, ruta)
     finally:
-        if os.path.exists(temporal):
+        if seguridad_archivos.archivo_propio(temporal, os.path.dirname(os.path.abspath(ruta)), r"\.indice-[a-z0-9_]+"):
             os.remove(temporal)
 
 
