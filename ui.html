@@ -38,18 +38,18 @@
   html[data-tema="claro"] .arch button{background:var(--amb-dim);color:var(--amb2)}
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--fb);font-size:15px;line-height:1.5;overflow:hidden}
+  body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--fb);font-size:15px;line-height:1.5;overflow:hidden;display:flex;flex-direction:column}
   button,input,select,textarea{font-family:inherit}
-  input,select,textarea{background:var(--bg);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:9px 11px;font-size:14px;width:100%}
+  input,select,textarea{background:var(--bg);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:9px 11px;font-size:15px;width:100%}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--amb);box-shadow:0 0 0 2px var(--amb-dim)}
   textarea{resize:vertical;min-height:70px}
-  label.lb{display:block;font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);margin-bottom:5px}
+  label.lb{display:block;font-family:var(--fm);font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);margin-bottom:5px}
   .campo{margin-bottom:12px}
   .fila2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .fila3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 
   /* ---------- topbar ---------- */
-  .top{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
+  .top{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:8px 18px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
   .logo{display:flex;align-items:center;gap:10px;flex:none;cursor:pointer;
         border-radius:11px;padding:4px 8px;margin-left:-8px;user-select:none}
   .logo:hover{background:var(--panel2)}
@@ -60,30 +60,40 @@
   .logo .ic svg{width:19px;height:19px;fill:#14120F}
   .logo .t{font-family:var(--fd);font-size:1.1rem}
   .logo .t small{display:block;font-family:var(--fm);font-size:9px;color:var(--tx3);letter-spacing:.13em;text-transform:uppercase}
-  .tabs{display:flex;gap:4px;flex:none}
-  .tab{background:none;border:1px solid transparent;color:var(--tx2);padding:9px 15px;border-radius:9px;cursor:pointer;font-family:var(--fd);font-size:14px;display:flex;align-items:center;gap:7px}
+  .tabs{display:flex;gap:4px;flex:none;flex-wrap:wrap}
+  .tab{background:none;border:1px solid transparent;color:var(--tx2);padding:8px 12px;border-radius:9px;cursor:pointer;font-family:var(--fd);font-size:14px;display:flex;align-items:center;gap:7px}
   .tab:hover{background:var(--panel2);color:var(--tx)}
   .tab.on{background:var(--amb);color:#14120F;font-weight:600}
   .tab .pill{background:rgba(0,0,0,.22);border-radius:99px;padding:1px 7px;font-family:var(--fm);font-size:10px}
   .tab.on .pill{background:rgba(0,0,0,.25)}
-  .buscador{flex:1;position:relative;max-width:520px}
+  .buscador{flex:1 1 260px;min-width:240px;position:relative;max-width:520px}
   .buscador input{padding:11px 40px 11px 40px;font-size:15px;background:var(--bg)}
   .buscador .lupa{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:17px;height:17px;stroke:var(--tx3);fill:none;stroke-width:2}
   .buscador .x{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--tx3);cursor:pointer;font-size:19px;padding:2px 7px;display:none}
   .buscador .x.on{display:block}
-  .cuenta{font-family:var(--fm);font-size:12px;color:var(--tx2);white-space:nowrap}
+  .cuenta{font-family:var(--fm);font-size:14px;color:var(--tx2);white-space:nowrap;flex:none}
   .cuenta b{color:var(--amb)}
+  /* pantallas angostas (1024 px): una sola fila, el buscador sigue siendo un cuadro y el contador no se corta */
+  @media(max-width:1180px){
+    .top{gap:8px 8px;padding:6px 12px}
+    .logo .t{display:none}
+    .logo{margin-left:0;padding:2px 4px}
+    .tab{padding:8px 9px}
+    .buscador{flex:1 1 200px;min-width:200px}
+    .buscador input{padding:8px 34px 8px 34px}
+    .buscador .lupa{left:10px}
+  }
 
   /* ---------- layout ---------- */
-  .cuerpo{display:flex;height:calc(100vh - 56px)}
+  .cuerpo{display:flex;flex:1 1 0;min-height:0}
   .lado{width:252px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:14px 12px 40px}
-  .lado h3{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3);margin:18px 0 8px;font-weight:600}
+  .lado h3{font-family:var(--fm);font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--tx3);margin:18px 0 8px;font-weight:600}
   .lado h3:first-child{margin-top:0}
   .fil{display:flex;flex-wrap:wrap;gap:6px}
-  .fb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:8px;padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .fb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer}
   .fb:hover{border-color:var(--amb);color:var(--tx)}
   .fb.on{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
-  .limpiar-todo{width:100%;background:none;border:1px dashed var(--line);color:var(--tx3);border-radius:9px;padding:9px;cursor:pointer;font-size:12.5px;font-family:var(--fd)}
+  .limpiar-todo{width:100%;background:none;border:1px dashed var(--line);color:var(--tx3);border-radius:9px;padding:9px;cursor:pointer;font-size:14px;font-family:var(--fd)}
   .limpiar-todo:hover{border-color:var(--rojo);color:var(--rojo);background:rgba(224,101,79,.08)}
   .limpiar-todo.arriba{margin:0 0 16px}
   .limpiar-todo.activo{border-style:solid;border-color:var(--amb);color:var(--amb2)}
@@ -94,27 +104,28 @@
   .cat-b:hover{border-color:var(--amb);color:var(--tx);transform:translateY(-2px)}
   .cat-b.on{background:var(--amb);border-color:var(--amb);color:#14120F}
   .cat-b .ic{font-size:21px;line-height:1;margin-bottom:5px}
-  .cat-b .nm{font-family:var(--fd);font-size:13.5px;line-height:1.2}
-  .cat-b .n{font-family:var(--fm);font-size:10px;color:var(--tx3);margin-top:2px}
+  .cat-b .nm{font-family:var(--fd);font-size:15px;line-height:1.2}
+  .cat-b .n{font-family:var(--fm);font-size:12px;color:var(--tx3);margin-top:2px}
   .cat-b.on .n{color:rgba(20,18,15,.65)}
   .subs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:11px}
   .subs:empty{display:none}
-  .sb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:99px;padding:7px 14px;font-size:12.5px;cursor:pointer;font-family:var(--fd)}
+  .sb{background:var(--panel2);border:1px solid var(--line);color:var(--tx2);border-radius:99px;padding:7px 14px;font-size:14px;cursor:pointer;font-family:var(--fd)}
   .sb:hover{border-color:var(--amb);color:var(--tx)}
   .sb.on{background:var(--amb-dim);border-color:var(--amb);color:var(--amb2);font-weight:600}
-  .sb .n{font-family:var(--fm);font-size:9.5px;opacity:.65;margin-left:4px}
+  .sb .n{font-family:var(--fm);font-size:12px;opacity:.75;margin-left:4px}
   .activos{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:13px}
   .activos:empty{display:none}
-  .act{background:var(--amb-dim);border:1px solid var(--amb);color:var(--amb2);border-radius:99px;padding:5px 8px 5px 12px;font-size:12px;display:inline-flex;align-items:center;gap:7px;font-family:var(--fd)}
-  .act button{background:rgba(0,0,0,.25);border:none;color:inherit;width:17px;height:17px;border-radius:50%;cursor:pointer;font-size:12px;line-height:1;padding:0}
+  .act{background:var(--amb-dim);border:1px solid var(--amb);color:var(--amb2);border-radius:99px;padding:5px 8px 5px 12px;font-size:14px;display:inline-flex;align-items:center;gap:7px;font-family:var(--fd)}
+  .act button{background:rgba(0,0,0,.25);border:none;color:inherit;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1;padding:0}
   .act button:hover{background:var(--rojo);color:#fff}
-  .act-limpiar{background:none;border:1px solid var(--line);color:var(--tx3);border-radius:99px;padding:6px 13px;font-size:12px;cursor:pointer;font-family:var(--fd)}
+  .act-limpiar{background:none;border:1px solid var(--line);color:var(--tx3);border-radius:99px;padding:6px 13px;font-size:14px;cursor:pointer;font-family:var(--fd)}
   .act-limpiar:hover{border-color:var(--rojo);color:var(--rojo)}
 
   .main{flex:1;overflow-y:auto;padding:18px 20px 70px}
   .vista{display:none} .vista.on{display:block}
   h2.tit{font-family:var(--fd);font-size:1.5rem;margin:0 0 4px}
-  .sub{color:var(--tx3);font-size:13.5px;margin:0 0 18px}
+  .sub{color:var(--tx3);font-size:14px;margin:0 0 18px}
+  #faltanCont .sub,.pop .sub{white-space:pre-wrap}
 
   /* ---------- grid modelos ---------- */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(206px,1fr));gap:15px}
@@ -127,15 +138,15 @@
   .estrella svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:1.8}
   .estrella.on svg{fill:var(--amb);stroke:var(--amb)}
   .badges{position:absolute;top:6px;right:6px;display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;z-index:2}
-  .bdg{font-family:var(--fm);font-size:8.5px;font-weight:700;padding:3px 5px;border-radius:5px}
+  .bdg{font-family:var(--fm);font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px}
   .bdg.lb{background:rgba(232,163,61,.93);color:#14120F}
   .bdg.man{background:rgba(224,101,79,.93);color:#fff}
   .bdg.d3{background:rgba(95,168,211,.93);color:#0b2029}
   .bdg.stk{background:rgba(111,191,115,.93);color:#0d2410}
   .card .info{padding:10px 11px 11px}
-  .card .nm{font-family:var(--fd);font-size:13.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
-  .card .rt{font-family:var(--fm);font-size:9.5px;color:var(--tx3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .card .pr{font-family:var(--fd);font-size:13px;color:var(--ok);margin-top:5px}
+  .card .nm{font-family:var(--fd);font-size:15px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
+  .card .rt{font-family:var(--fm);font-size:12px;color:var(--tx3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:pre}
+  .card .pr{font-family:var(--fd);font-size:14px;color:var(--ok);margin-top:5px}
 
   .vacio{text-align:center;padding:60px 20px;color:var(--tx3)}
   .cargando{text-align:center;padding:40px;color:var(--tx3);font-family:var(--fm)}
@@ -154,13 +165,13 @@
   .chip.deb{background:#4A2018;color:#FFB3A3}
   .chip.venc{background:var(--rojo);color:#fff}
 
-  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:9px 15px;cursor:pointer;font-family:var(--fd);font-size:13.5px;display:inline-flex;align-items:center;gap:7px}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:9px 15px;cursor:pointer;font-family:var(--fd);font-size:14px;display:inline-flex;align-items:center;gap:7px}
   .btn:hover{border-color:var(--amb);color:var(--amb2)}
   .btn.pri{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
   .btn.pri:hover{background:var(--amb2);color:#14120F}
   .btn.del{color:var(--rojo);border-color:#4A2A22}
   .btn.del:hover{background:var(--rojo);color:#fff}
-  .btn.mini{padding:5px 10px;font-size:12px}
+  .btn.mini{padding:5px 10px;font-size:14px}
   .barra{display:flex;gap:9px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
 
   /* ---------- panel métricas ---------- */
@@ -180,33 +191,33 @@
   /* ---------- modal ---------- */
   .velo{position:fixed;inset:0;background:rgba(8,7,5,.84);display:none;align-items:center;justify-content:center;padding:22px;z-index:60;backdrop-filter:blur(3px)}
   .velo.on{display:flex}
-  .caja-m{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:100%;max-width:940px;max-height:91vh;display:flex;flex-direction:column;overflow:hidden}
+  .caja-m{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:100%;max-width:940px;max-height:95vh;display:flex;flex-direction:column;overflow:hidden}
   .caja-m.chica{max-width:520px}
   .mh{display:flex;align-items:flex-start;justify-content:space-between;gap:13px;padding:16px 20px;border-bottom:1px solid var(--line)}
   .mh h2{font-family:var(--fd);font-size:1.3rem;margin:0;line-height:1.2}
-  .mh .rt{font-family:var(--fm);font-size:10.5px;color:var(--tx3);margin-top:4px;word-break:break-all}
+  .mh .rt{font-family:var(--fm);font-size:12px;color:var(--tx3);margin-top:4px;word-break:break-all;white-space:pre-wrap}
   .xb{background:none;border:1px solid var(--line);color:var(--tx2);width:34px;height:34px;border-radius:9px;cursor:pointer;font-size:19px;flex:none;line-height:1}
   .xb:hover{border-color:var(--rojo);color:var(--rojo)}
-  .mb{padding:16px 20px 22px;overflow-y:auto}
+  .mb{padding:12px 20px 18px;overflow-y:auto}
   .mf{padding:13px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;background:var(--panel2)}
   .mtabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
-  .mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);padding:11px 14px;cursor:pointer;font-family:var(--fd);font-size:13.5px}
+  .mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);padding:11px 14px;cursor:pointer;font-family:var(--fd);font-size:14px}
   .mtab:hover{color:var(--tx)}
   .mtab.on{color:var(--amb2);border-bottom-color:var(--amb)}
   .mpanel{display:none} .mpanel.on{display:block}
   .cols{display:grid;grid-template-columns:290px 1fr;gap:20px}
   @media(max-width:820px){ .cols{grid-template-columns:1fr} }
-  .prev{border-radius:12px;overflow:hidden;background:var(--panel2);border:1px solid var(--line);aspect-ratio:4/3;display:grid;place-items:center}
+  .prev{border-radius:12px;overflow:hidden;background:var(--panel2);border:1px solid var(--line);aspect-ratio:16/10;display:grid;place-items:center}
   .prev img{width:100%;height:100%;object-fit:contain;cursor:zoom-in}
-  .acciones{display:flex;flex-direction:column;gap:8px;margin-top:13px}
-  .acc{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--tx);cursor:pointer;font-size:14px;font-family:var(--fd);text-align:left;width:100%}
+  .acciones{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .acc{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--tx);cursor:pointer;font-size:15px;font-family:var(--fd);text-align:left;width:100%}
   .acc:hover{border-color:var(--amb);background:var(--panel3)}
   .acc svg{width:17px;height:17px;flex:none}
   .acc .em{font-size:19px;flex:none;line-height:1}
   .acc.pri .em{filter:saturate(1.2)}
   .acc.pri{background:var(--amb);border-color:var(--amb);color:#14120F;font-weight:600}
   .acc.pri:hover{background:var(--amb2)}
-  .acc small{display:block;font-family:var(--fb);font-weight:400;font-size:11px;color:var(--tx3);margin-top:1px}
+  .acc small{display:block;font-family:var(--fb);font-weight:400;font-size:12px;color:var(--tx3);margin-top:1px;word-break:break-word}
   .acc.pri small{color:rgba(20,18,15,.6)}
   .acc.vacio{background:transparent;border-style:dashed;color:var(--tx3)}
   .acc.vacio svg{opacity:.6}
@@ -215,9 +226,9 @@
   .secc{margin-bottom:16px}
   .secc h4{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3);margin:0 0 7px}
   .arch{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:9px;border:1px solid var(--line);margin-bottom:5px;background:var(--panel2)}
-  .arch .an{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .arch .ax{font-family:var(--fm);font-size:9px;color:var(--tx3);text-transform:uppercase;border:1px solid var(--line);padding:2px 5px;border-radius:4px;flex:none}
-  .arch button{background:var(--amb-dim);border:none;color:var(--amb2);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:600;flex:none;font-family:var(--fd)}
+  .arch .an{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:pre}
+  .arch .ax{font-family:var(--fm);font-size:11px;color:var(--tx3);text-transform:uppercase;border:1px solid var(--line);padding:2px 5px;border-radius:4px;flex:none}
+  .arch button{background:var(--amb-dim);border:none;color:var(--amb2);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:14px;font-weight:600;flex:none;font-family:var(--fd)}
   .arch button:hover{background:var(--amb);color:#14120F}
   .arch button.bx{background:none;border:1px solid var(--line);color:var(--tx3);padding:5px 9px}
   .arch button.bx:hover{background:var(--rojo);border-color:var(--rojo);color:#fff}
@@ -227,7 +238,7 @@
   /* ventanita para elegir con qué programa abrir */
   .pop{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:100%;max-width:420px;padding:19px 21px}
   .pop h3{font-family:var(--fd);margin:0 0 4px;font-size:1.08rem}
-  .pop .sub{color:var(--tx3);font-size:12.5px;margin-bottom:13px;word-break:break-all}
+  .pop .sub{color:var(--tx3);font-size:14px;margin-bottom:13px;word-break:break-all}
   .pop-secc{font-family:var(--fd);font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--tx3);margin:15px 0 8px;border-top:1px solid var(--line);padding-top:12px}
   .fmts{display:flex;flex-wrap:wrap;gap:7px}
   .fmt{background:var(--panel2);border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:8px 14px;cursor:pointer;font-family:var(--fm);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
@@ -253,20 +264,20 @@
   .catg{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--panel2)}
   .catg-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
   .catg-h b{font-family:var(--fd);font-size:1rem;color:var(--amb2)}
-  .catg-h .sub{flex:1;margin:0;font-size:12px}
+  .catg-h .sub{flex:1;margin:0;font-size:14px}
   .aviso-ed{background:var(--amb-dim);border:1px solid var(--amb);border-radius:11px;
              padding:13px 15px;margin-bottom:14px}
   .aviso-ed b{font-family:var(--fd);color:var(--amb2)}
   .aviso-ed p{margin:5px 0 10px;font-size:13px;color:var(--tx2)}
   .catg-h .mover{display:flex;flex-direction:column;gap:1px;flex:none}
   .catg-h .fl{background:none;border:1px solid var(--line);color:var(--tx3);border-radius:4px;
-              cursor:pointer;font-size:8px;line-height:1;padding:2px 4px;font-family:var(--fd)}
+              cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;font-family:var(--fd)}
   .catg-h .fl:hover:not(:disabled){border-color:var(--amb);color:var(--amb2)}
   .catg-h .fl:disabled{opacity:.25;cursor:default}
-  .catg-h .mia{background:var(--amb-dim);color:var(--amb2);font-size:10px;border-radius:5px;
+  .catg-h .mia{background:var(--amb-dim);color:var(--amb2);font-size:12px;border-radius:5px;
                padding:2px 6px;font-family:var(--fd);flex:none}
   .catg-h .bo,.catg-h .bx{background:none;border:1px solid var(--line);color:var(--tx3);
-               border-radius:7px;padding:5px 9px;cursor:pointer;font-size:11.5px;flex:none}
+               border-radius:7px;padding:5px 9px;cursor:pointer;font-size:14px;flex:none}
   .catg-h .bo:hover{border-color:var(--amb);color:var(--amb2)}
   .catg-h .bx:hover{background:var(--rojo);border-color:var(--rojo);color:#fff}
   .pop-pie{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
@@ -276,7 +287,7 @@
   .dupi .th{width:58px;height:44px;border-radius:7px;object-fit:cover;flex:none;background:var(--bg)}
   .dupi .dn{flex:1;min-width:0}
   .dupi .dn b{display:block;font-family:var(--fd);font-size:13.5px}
-  .dupi .dn small{color:var(--tx3);font-family:var(--fm);font-size:10.5px}
+  .dupi .dn small{color:var(--tx3);font-family:var(--fm);font-size:12px;white-space:pre-wrap;word-break:break-all}
   .dupi .mejor{background:#1D3D22;color:#A9E5AC;font-family:var(--fm);font-size:9.5px;padding:3px 7px;border-radius:99px;font-weight:700}
   /* resultado de la cotización */
   .qres{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-top:14px}
@@ -328,7 +339,8 @@
   details[data-plegable]>summary:focus-visible{outline:2px solid var(--amb2);outline-offset:2px}
   .categoria-activa{font-weight:400;color:var(--tx2);font-size:.9rem;display:inline-block;max-width:65%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
   #catsCont button,#reglasCont button,.fil .fb,.subs .sb,.barra .btn{min-height:44px;min-width:44px}
-  #catsCont .catg-h{flex-wrap:wrap;padding:10px 0}
+  #catsCont .catg-h{flex-wrap:wrap;align-items:center;padding:10px 0}
+  #catsCont .catg-h .mover{flex-direction:row;gap:6px;align-items:center}
   #catsCont .bo,#catsCont .bx,#catsCont .fl,#reglasCont .bx{height:44px;width:44px}
   #catsCont .arch{min-height:44px}
   .aviso-orden{padding:14px;border:1px solid var(--amb2);border-radius:9px;line-height:1.6}
@@ -336,7 +348,7 @@
   #respaldosCont .btn{min-height:44px}
   button:disabled{cursor:default;opacity:.5}
   .card.seleccionada{outline:3px solid var(--amb2);outline-offset:2px}
-  #v-biblio>details{position:sticky;top:0;z-index:4;background:var(--bg);padding-bottom:6px}
+  #v-biblio>details{padding-bottom:6px}
   .quitar-card{position:absolute;bottom:8px;right:8px;border:0;border-radius:7px;background:var(--panel);color:var(--tx);width:36px;height:36px;cursor:pointer;z-index:2}
   .destino-drag{outline:3px solid var(--amb2);background:var(--panel2)}
   [draggable="true"]{cursor:grab}
@@ -649,7 +661,7 @@ function refrescarModelo(rel){
 function confirmarQuitarModelo(rel){
   var elegido=MODELOS.find(function(m){return m.rel===rel}), rutaPadre=elegido&&elegido.ruta;
   var dentro=MODELOS.filter(function(m){return m.rel!==rel&&(rutaPadre&&m.ruta?m.ruta.replace(/\\/g,'/').toLowerCase().indexOf(rutaPadre.replace(/\\/g,'/').toLowerCase()+'/')===0:m.rel.replace(/\\/g,'/').indexOf(rel.replace(/\\/g,'/')+'/')===0)}).length;
-  return confirm('¿Quitar este modelo de la biblioteca?\n\n'+(dentro?'Esta carpeta contiene '+dentro+' modelos. Solo se quitará este; los de adentro seguirán visibles.\n\n':'')+'Tus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.');
+  return confirm('¿Quitar este modelo de la biblioteca?\n\n'+(dentro?'Esta carpeta contiene '+plural(dentro,'modelo','modelos')+'. '+(dentro===1?'Solo se quitará este; el de adentro seguirá visible.':'Solo se quitará este; los de adentro seguirán visibles.')+'\n\n':'')+'Tus archivos siguen en su carpeta. Para que vuelva: Limpieza -> Ver ocultos.');
 }
 function quitarModelo(rel){
   if(!confirmarQuitarModelo(rel)) return;
@@ -752,8 +764,17 @@ document.addEventListener('drop',function(e){
   }).catch(function(){toast('No pude guardar el orden.',true)});
 });
 function tamañoAgregado(bytes){
-  var gb=bytes/(1024*1024*1024), mb=bytes/(1024*1024);
-  return (gb>=1?gb:mb).toLocaleString('es-CL',{maximumFractionDigits:1})+(gb>=1?' GB':' MB');
+  var n=Number(bytes)||0, gb=n/(1024*1024*1024), mb=n/(1024*1024), kb=n/1024;
+  if(gb>=1) return gb.toLocaleString('es-CL',{maximumFractionDigits:1})+' GB';
+  if(mb>=1) return mb.toLocaleString('es-CL',{maximumFractionDigits:1})+' MB';
+  if(n>0&&n<1024) return n.toLocaleString('es-CL')+' bytes';
+  return Math.max(0,Math.round(kb)).toLocaleString('es-CL')+' KB';
+}
+function plural(n,uno,varios){ n=Number(n)||0; return n.toLocaleString('es-CL')+' '+(n===1?uno:varios); }
+function tamañoMB(mb){
+  mb=Number(mb)||0;
+  if(mb<=0) return 'menos de 50 KB';
+  return tamañoAgregado(mb*1024*1024);
 }
 function mostrarNuevos(rels,categoria,subcategoria){
   document.getElementById('velo').classList.remove('on');
@@ -788,19 +809,15 @@ function recibirAgregado(id){
         api('/api/agregados/confirmar',{id:id}).then(function(res){
           if(!res.ok){caja.hidden=true;jobAgregado=null;toast(res.error||'No pude iniciar la copia.',true);return;}
           setTimeout(revisar,350);
-        }).catch(fallo);
+        }).catch(errorDeRed);
         return;
       }
-      if(r.estado==='error'||r.error){
-        caja.hidden=true;jobAgregado=null;toast(r.error||'No pude agregarlo.',true);
-        if((r.nuevos||[]).length) mostrarNuevos(r.nuevos,r.categoria,r.subcategoria);
-        return;
-      }
+      if(r.estado==='error'||r.error){ terminarConError(r); return; }
       if(r.estado==='listo'){
         caja.hidden=true;jobAgregado=null;
         mostrarNuevos(r.nuevos,r.categoria,r.subcategoria).then(function(){
           toast((r.nuevos||[]).length
-            ? 'Listo. '+r.nuevos.length+' modelos agregados. Tus originales siguen donde estaban.'+(r.categoria?' Si no te gusta, Respaldo -> Volver a como estaba.':'')
+            ? 'Listo. '+plural(r.nuevos.length,'modelo agregado','modelos agregados')+'. Tus originales siguen donde estaban.'+(r.categoria?' Si no te gusta, Respaldo -> Volver a como estaba.':'')
             : 'Listo, copiados a Agregados. Una carpeta aparece como modelo cuando tiene un archivo para cortar.');
         });
         return;
@@ -809,7 +826,20 @@ function recibirAgregado(id){
       txt.textContent=r.estado==='leyendo'?'Leyendo los modelos nuevos...':r.estado==='copiando'?'Copiando '+r.copiados+' de '+r.total+' archivos':'Revisando qué vas a agregar...';
       if(r.estado==='copiando'){barra.max=Math.max(1,r.bytes);barra.value=r.bytes_copiados||0;}else barra.removeAttribute('value');
       setTimeout(revisar,350);
-    }).catch(fallo);
+    }).catch(errorDeRed);
+  }
+  // El servidor contestó con un error: se muestra SU mensaje, no el de falla de red.
+  function terminarConError(r){
+    caja.hidden=true;jobAgregado=null;
+    var mensaje=r.error||'No pude agregarlo.';
+    toast(mensaje,true);
+    if((r.nuevos||[]).length){
+      if(confirm(mensaje+'\n\n¿Quieres ver lo que sí alcanzó a copiarse?')) mostrarNuevos(r.nuevos,r.categoria,r.subcategoria);
+    }
+  }
+  function errorDeRed(e){
+    if(e&&e.servidor&&e.datos){ terminarConError(e.datos); return; }
+    fallo();
   }
   function fallo(){caja.hidden=true;jobAgregado=null;toast('No pude consultar el avance de la copia. Revisa Agregados antes de volver a intentarlo.',true);}
   revisar();
@@ -840,7 +870,7 @@ function api(u,d){
   var bloqueados=[boton,guardar].filter(function(b,i,a){return b&&a.indexOf(b)===i&&!b.disabled});
   bloqueados.forEach(function(b){b.disabled=true});
   return fetch(u, Object.assign({signal:control.signal},d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:{}))
-    .then(function(r){return r.json().then(function(datos){if(!r.ok||datos.error)throw new Error(datos.error||'No pude completar esta acción.');return datos})})
+    .then(function(r){return r.json().then(function(datos){if(!r.ok||datos.error){var e=new Error(datos.error||'No pude completar esta acción.');e.servidor=true;e.datos=datos;throw e}return datos})})
     .catch(function(e){toast(e.name==='AbortError'?'La acción demoró demasiado. Revisa el resultado antes de volver a intentarlo.':e.message||'No pude comunicarme con la biblioteca.',true);throw e})
     .finally(function(){clearTimeout(tiempo);bloqueados.forEach(function(b){b.disabled=false})});
 }
@@ -856,7 +886,7 @@ function cargar(){
     });
     document.getElementById('cargando').style.display='none';
     filtrosLaterales(); sincronizarBotones(); pintarCategorias(); aplicar(true); actualizarPills();
-    if(d.no_encontrados) toast('Hay '+d.no_encontrados+' modelos con datos que ya no encuentro. Revísalos en Limpieza.',true);
+    if(d.no_encontrados) toast('Hay '+plural(d.no_encontrados,'modelo con datos que ya no encuentro','modelos con datos que ya no encuentro')+'. Revísalos en Limpieza.',true);
     if(d.aviso_respaldo) toast(d.aviso_respaldo,true);
   });
 }
@@ -1085,13 +1115,16 @@ function abrirModelo(rel){
      ['corel','Abrir en CorelDRAW','🎨','']].forEach(function(x){
       var k=x[0], info=ae[k]||{};
       if(!info.puede){
-        a.push('<button class="acc vacio" disabled title="'+esc(info.motivo||'')+'"><span class="em">'+x[2]+'</span>'
-          +'<span>'+esc(x[1])+'<small>'+esc(info.motivo||'No se puede con este modelo')+'</small></span></button>');
+        // Apagado pero con explicación: un botón "disabled" no responde al clic.
+        var porque=info.motivo||'No se puede con este modelo';
+        a.push('<button class="acc vacio" aria-disabled="true" data-aviso="'+esc(porque)+'" title="'+esc(porque)+'"><span class="em">'+x[2]+'</span>'
+          +'<span>'+esc(x[1])+'<small>'+esc(porque)+'</small></span></button>');
         return;
       }
       var pie = esc(info.archivo);
-      if(!info.instalado) pie += ' · No encuentro '+(k==='corel'?'CorelDRAW':'LightBurn')+'. Indica dónde está en Ajustes → Programas.';
-      a.push('<button class="acc '+x[3]+'" data-abrir-en="'+k+'"'+(!info.instalado?' disabled':'')+'><span class="em">'+x[2]+'</span>'
+      var sinProg = 'No encuentro '+(k==='corel'?'CorelDRAW':'LightBurn')+'. Indica dónde está en Ajustes → Programas.';
+      if(!info.instalado) pie += ' · falta el programa';
+      a.push('<button class="acc '+x[3]+(!info.instalado?' vacio':'')+'" '+(!info.instalado?'aria-disabled="true" data-aviso="'+esc(sinProg)+'"':'data-abrir-en="'+k+'"')+'><span class="em">'+x[2]+'</span>'
         +'<span>'+esc(x[1])+'<small>'+pie+'</small></span></button>');
     });
 
@@ -1143,7 +1176,7 @@ document.getElementById('dOcultar').addEventListener('click',function(){
   var msg = v.oculto
     ? '¿Volver a mostrar este modelo en la biblioteca?'
     : '¿Quitar este modelo de la biblioteca?\n\nSolo se esconde de la app: los archivos NO se borran de tu computador.\nPuedes volver a mostrarlo desde Limpieza → Ocultos.';
-  if(!v.oculto&&actual.submodelos) msg+='\n\nEsta carpeta contiene '+actual.submodelos+' modelos. Solo se quitará este; los de adentro seguirán visibles.';
+  if(!v.oculto&&actual.submodelos) msg+='\n\nEsta carpeta contiene '+plural(actual.submodelos,'modelo','modelos')+'. '+(actual.submodelos===1?'Solo se quitará este; el de adentro seguirá visible.':'Solo se quitará este; los de adentro seguirán visibles.');
   if(!confirm(msg)) return;
   api('/api/ocultar',{rel:actual.rel}).then(function(r){
     if(!r.ok) return toast(r.error||'No se pudo',true);
@@ -1159,7 +1192,7 @@ function verNoEncontrados(){
     var c=document.getElementById('faltanCont');
     if(!r.items.length){c.innerHTML='';return}
     c.innerHTML='<div class="caja"><h4>Modelos que ya no encuentro ('+r.items.length+')</h4><p class="sub">Sus precios, notas y otros datos siguen guardados. Elige la carpeta nueva para recuperarlos, o descarta esos datos. Los archivos se conservan.</p><datalist id="carpetasEncontradas">'+r.destinos.map(function(m){return '<option value="'+esc(m.rel)+'">'+esc(m.ruta)+'</option>'}).join('')+'</datalist>'+
-      r.items.map(function(m,i){return '<div class="secc"><b>'+esc(m.nombre)+'</b><p class="sub">'+esc(m.ruta)+'</p><input id="asociar'+i+'" list="carpetasEncontradas" placeholder="Busca la carpeta nueva" value="'+esc(m.sugeridas.length===1?m.sugeridas[0].rel:'')+'">'+(m.sugeridas.length?'<p class="sub">Carpetas con el mismo nombre: '+m.sugeridas.map(function(s){return esc(s.rel)}).join(', ')+'</p>':'')+'<button class="btn" data-asociar="'+i+'">Asociar carpeta</button> <button class="btn del" data-descartar="'+i+'">Descartar datos</button></div>'}).join('')+'</div>';
+      r.items.map(function(m,i){return '<div class="secc"><b>'+esc(m.nombre)+'</b><p class="sub">'+esc(m.ruta)+'</p><input id="asociar'+i+'" list="carpetasEncontradas" placeholder="Busca la carpeta nueva" value="'+esc(m.sugeridas.length===1?m.sugeridas[0].rel:'')+'">'+(m.sugeridas.length?'<p class="sub">Carpetas con el mismo nombre o los mismos archivos: '+m.sugeridas.map(function(s){return esc(s.rel)}).join(', ')+'</p>':'')+'<button class="btn" data-asociar="'+i+'">Asociar carpeta</button> <button class="btn del" data-descartar="'+i+'">Descartar datos</button></div>'}).join('')+'</div>';
     c.querySelectorAll('[data-asociar],[data-descartar]').forEach(function(b){b.onclick=function(){
       var descartar=b.dataset.descartar!==undefined, i=+(descartar?b.dataset.descartar:b.dataset.asociar), m=r.items[i];
       if(!confirm(descartar?'¿Descartar los datos guardados de '+m.nombre+'? Sus ventas y encargos se conservarán sin asociar a un modelo.':'¿Asociar los datos de '+m.nombre+' a la carpeta '+val('asociar'+i)+'?'))return;
@@ -1173,7 +1206,7 @@ function resultadoDuplicados(r){
     if(!g.length){ c.innerHTML='<div class="caja"><h4>Repetidos</h4><p class="sub">No encontré modelos repetidos. 👌</p></div>'; return; }
     DUP=g; DUP_MOSTRADOS=0;
     var tot=g.reduce(function(a,x){return a+x.length-1},0);
-    c.innerHTML='<div class="caja"><h4>'+g.length+' grupos de repetidos ('+tot+' modelos de más)</h4>'
+    c.innerHTML='<div class="caja"><h4>'+plural(g.length,'grupo de repetidos','grupos de repetidos')+' ('+plural(tot,'modelo de más','modelos de más')+')</h4>'
       +'<p class="sub">Marcados con “más completo” los que tienen más archivos. Quita el que no quieras ver. Sus archivos siguen en su carpeta.</p>'
       +'<div id="dupLista"></div><div style="text-align:center;margin-top:12px"><button class="btn" id="dupMas">Mostrar más</button></div></div>';
     pintarDupLote();
@@ -1196,12 +1229,12 @@ function pintarDupLote(){
     var g=DUP, fin=Math.min(DUP_MOSTRADOS+DUP_LOTE,g.length);
     var h=g.slice(DUP_MOSTRADOS,fin).map(function(gr,k){
         var i=DUP_MOSTRADOS+k;
-        return '<div class="dupg"><h5>Repetido '+(i+1)+' — '+gr.length+' copias</h5>'
+        return '<div class="dupg"><h5>Repetido '+(i+1)+' — '+plural(gr.length,'copia','copias')+'</h5>'
           + gr.filter(function(m){return !MODELOS.some(function(v){return v.rel===m.rel&&v.oculto})}).map(function(m,j){
             return '<div class="dupi">'
               +(m.prev?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'">':'<div class="th"></div>')
               +'<div class="dn"><b>'+esc(m.nombre)+(j===0?' <span class="mejor">más completo</span>':'')+'</b>'
-              +'<small>'+esc(m.ruta)+' · '+m.n_corte+' archivos · '+m.mb+' MB'+(m.fav?' · ★':'')+'</small></div>'
+              +'<small>'+esc(m.ruta)+' · '+plural(m.n_corte,'archivo','archivos')+' · '+tamañoMB(m.mb)+(m.fav?' · ★':'')+'</small></div>'
               +'<button class="btn mini" data-verdup="'+esc(m.rel)+'">Ver</button>'
               +'<button class="btn mini del" data-deldup="'+esc(m.rel)+'">🗑 Quitar de la biblioteca</button></div>';
           }).join('')+'</div>';
@@ -1261,6 +1294,9 @@ document.getElementById('v-limpieza').addEventListener('click',function(e){
 });
 document.getElementById('velo').addEventListener('click',function(e){
   if(e.target===this){this.classList.remove('on');return}
+  // botones apagados: al tocarlos explican por qué no se puede, nunca callan
+  var av=e.target.closest('[data-aviso]');
+  if(av){ toast(av.dataset.aviso,true); return; }
   // botones apagados (no hay ese archivo): llevan a la pestaña para agregarlo
   var fa=e.target.closest('[data-falta]');
   if(fa){
@@ -1629,7 +1665,7 @@ function verAjustes(mensajeRespaldo){
       + esc(v.version)+(v.nombre?' — '+esc(v.nombre):'')+'</b>';
   });
   document.getElementById('rutaTxt').innerHTML='<span style="font-family:var(--fm);font-size:12px">'+esc((D&&D.raiz)||'—')+'</span>'
-    +'<br>'+MODELOS.length.toLocaleString('es-CL')+' modelos encontrados';
+    +'<br>'+plural(MODELOS.length,'modelo encontrado','modelos encontrados');
   verCostos(); verProgramas(); verCategorias(); verCarpetas(); verRespaldos(mensajeRespaldo);
   var guardada='carpetas';
   try{ guardada=localStorage.getItem('ajustes_seccion')||'carpetas'; }catch(e){}
@@ -1678,7 +1714,7 @@ function verCarpetas(){
     return '<div class="arch"><span class="ax">📁</span>'
       +'<span class="an" style="white-space:normal"><b>'+esc(x.ruta)+'</b>'
       +(x.principal?' <span class="mia">principal</span>':'')
-      +'<br><small style="color:var(--tx3)">'+x.modelos.toLocaleString('es-CL')+' modelos</small></span>'
+      +'<br><small style="color:var(--tx3)">'+plural(x.modelos,'modelo','modelos')+'</small></span>'
       +(x.principal?'':'<button class="bx" data-quitarcarpeta="'+esc(x.ruta)+'" title="Sacar esta carpeta">✕</button>')
       +'</div>';
   }).join('');
@@ -1689,7 +1725,7 @@ document.getElementById('btnAgregarCarpeta').onclick=function(){
   if(r===null) return;
   toast('Leyendo la carpeta, espera...');
   api('/api/carpeta/agregar',{carpeta:r.trim()}).then(function(res){
-    if(res.ok){ toast('Listo · '+res.total.toLocaleString('es-CL')+' modelos en '+res.carpetas+' carpetas');
+    if(res.ok){ toast('Listo · '+plural(res.total,'modelo','modelos')+' en '+plural(res.carpetas,'carpeta','carpetas'));
                 cargar().then(function(){ verAjustes(); }); }
     else toast(res.error||'No se pudo', true);
   });
@@ -1701,7 +1737,7 @@ document.getElementById('carpetasCont').addEventListener('click',function(e){
     +'\n\nNo se borra ningún archivo: solo dejan de aparecer sus modelos.')) return;
   toast('Sacando la carpeta...');
   api('/api/carpeta/quitar',{carpeta:q.dataset.quitarcarpeta}).then(function(r){
-    if(r.ok){ toast('Listo · '+r.total.toLocaleString('es-CL')+' modelos');
+    if(r.ok){ toast('Listo · '+plural(r.total,'modelo','modelos'));
               cargar().then(function(){ verAjustes(); aplicar(); }); }
     else toast(r.error||'No se pudo', true);
   });
@@ -1710,19 +1746,20 @@ document.getElementById('carpetasCont').addEventListener('click',function(e){
 // -------- gestor de categorías y subcategorías --------
 function verCategorias(){
   var cats=D.categorias||[], h='';
+  var grandes=cats.filter(function(c){return c.nombre!=='Otros'}).length;
   h+='<div class="barra" style="margin-bottom:12px">'
-    +'<button class="btn pri" id="catNueva"'+(cats.length>=6?' disabled title="Ya tienes 6 categorías. Saca una antes de crear otra."':'')+'>+ Categoría nueva</button>'
+    +'<button class="btn pri" id="catNueva"'+(grandes>=6?' disabled title="Ya tienes 6 categorías. Saca una antes de crear otra."':'')+'>+ Categoría nueva</button>'
     +'<button class="btn" id="catCarpeta">📁 Una carpeta entera a una categoría</button></div>';
-  if(cats.length>=6) h+='<p class="sub">Puedes tener hasta 6 categorías grandes. Saca una antes de crear otra.</p>';
+  h+='<p class="sub">Puedes tener hasta 6 categorías grandes. «Otros» no cuenta, siempre está.'+(grandes>=6?' Saca una antes de crear otra.':'')+'</p>';
   cats.forEach(function(c,i){
     h+='<details class="catg" data-plegable="categoria-'+esc(c.nombre)+'" data-org-cat="'+esc(c.nombre)+'"><summary draggable="true" data-arr-cat="'+esc(c.nombre)+'">'+esc(c.nombre)
-      +' <span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span></summary><div class="catg-h">'
+      +' <span class="sub">'+plural(c.n,'modelo','modelos')+'</span></summary><div class="catg-h">'
       +'<span class="mover">'
       +'<button class="fl" data-subir="'+esc(c.nombre)+'"'+(i===0?' disabled title="Ya está primera"':' title="Subir"')+'>▲</button>'
       +'<button class="fl" data-bajar="'+esc(c.nombre)+'"'+(i===cats.length-1?' disabled title="Ya está última"':' title="Bajar"')+'>▼</button>'
       +'</span>'
       +(c.propia?'<span class="mia">tuya</span>':'')
-      +'<span class="sub">'+c.n.toLocaleString('es-CL')+' modelos</span>'
+      +'<span class="sub">'+plural(c.n,'modelo','modelos')+'</span>'
       +'<button class="btn mini" data-nuevasub="'+esc(c.nombre)+'">+ Subcategoría</button>'
       +'<button class="bo" data-rencat="'+esc(c.nombre)+'" title="Cambiarle el nombre">✎</button>'
       +'<button class="bx" data-borcat="'+esc(c.nombre)+'" title="Sacar esta categoría">✕</button>'
@@ -1806,7 +1843,7 @@ document.getElementById('catsCont').addEventListener('click',function(e){
     if(ruta===null) return;
     toast('Marcando la carpeta...');
     api('/api/carpeta/marcar',{carpeta:ruta.trim(),categoria:cat.trim()})
-      .then(refrescar(function(r){return r.modelos.toLocaleString('es-CL')+' modelos quedaron en '+r.categoria}));
+      .then(refrescar(function(r){return (r.modelos===1?'1 modelo quedó':plural(r.modelos,'modelo','modelos')+' quedaron')+' en '+r.categoria}));
     return;
   }
   // ordenar con las flechas
@@ -1825,7 +1862,7 @@ document.getElementById('catsCont').addEventListener('click',function(e){
   if(rc){
     var nv=prompt('Nombre nuevo para "'+rc.dataset.rencat+'":', rc.dataset.rencat);
     if(nv&&nv.trim()) api('/api/categoria/renombrar',{vieja:rc.dataset.rencat,nueva:nv.trim()})
-      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos'}));
+      .then(refrescar(function(r){return 'Listo · '+plural(r.movidos,'modelo','modelos')}));
     return;
   }
   // borrar categoria grande
@@ -1839,7 +1876,7 @@ document.getElementById('catsCont').addEventListener('click',function(e){
     if(d===null) return;
     if(!d.trim()) return toast('Elige una categoría de destino.',true);
     api('/api/categoria/borrar',{nombre:nom2,destino:d.trim()})
-      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos '+(r.destino?('a '+r.destino):'reordenados solos')}));
+      .then(refrescar(function(r){return 'Listo · '+plural(r.movidos,'modelo','modelos')+' '+(r.destino?('a '+r.destino):'reordenados solos')}));
     return;
   }
 
@@ -1855,7 +1892,7 @@ document.getElementById('catsCont').addEventListener('click',function(e){
     var nv=prompt('Nombre nuevo para "'+rn.dataset.rensub+'":', rn.dataset.rensub);
     if(nv&&nv.trim()) api('/api/subcategoria/renombrar',
       {categoria:rn.dataset.cat,vieja:rn.dataset.rensub,nueva:nv.trim()})
-      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos movidos'}));
+      .then(refrescar(function(r){return 'Listo · '+(r.movidos===1?'1 modelo movido':plural(r.movidos,'modelo','modelos')+' movidos')}));
     return;
   }
   var bs=e.target.closest('[data-borsub]');
@@ -1870,7 +1907,7 @@ document.getElementById('catsCont').addEventListener('click',function(e){
     var destino=prompt(msg,'');
     if(destino===null) return;
     api('/api/subcategoria/borrar',{categoria:cat,nombre:sub,destino:destino.trim()})
-      .then(refrescar(function(r){return 'Listo · '+r.movidos+' modelos a '+(r.destino||'sin subcategoría')}));
+      .then(refrescar(function(r){return 'Listo · '+plural(r.movidos,'modelo','modelos')+' a '+(r.destino||'sin subcategoría')}));
   }
 });
 
@@ -2065,7 +2102,7 @@ document.getElementById('btnQuitarCarpetaRespaldo').onclick=function(){
     else toast(r.error||'No pude cambiar la carpeta.',true);
   });
 };
-document.getElementById('btnExportar').onclick=function(){ window.location='/api/datos/exportar'; toast('Descargando respaldo...') };
+document.getElementById('btnExportar').onclick=function(){ window.location='/api/datos/exportar'; toast('Se abrió la ventana «Guardar como». Elige dónde guardar el respaldo. Si la cancelas, no se guarda nada.') };
 document.getElementById('btnImportar').onclick=function(){ document.getElementById('fileImportar').click() };
 document.getElementById('fileImportar').onchange=function(){
   var f=this.files[0]; if(!f) return;
@@ -2073,7 +2110,7 @@ document.getElementById('fileImportar').onchange=function(){
   lector.onload=function(){
     var datos; try{ datos=JSON.parse(lector.result) }catch(e){ return toast('El archivo no es un respaldo válido',true) }
     api('/api/datos/importar',{datos:datos,modo:'fusionar'}).then(function(r){
-      if(r.ok){ var n=r.importado; toast('Cargado: '+n.modelos+' modelos, '+n.clientes+' clientes, '+n.ventas+' ventas');
+      if(r.ok){ var n=r.importado; toast('Cargado: '+plural(n.modelos,'modelo','modelos')+', '+plural(n.clientes,'cliente','clientes')+', '+plural(n.ventas,'venta','ventas'));
         cargar().then(function(){verAjustes();aplicar()}); }
       else toast(r.error||'No se pudo cargar',true);
     });
@@ -2091,7 +2128,7 @@ function cambiarCarpeta(ruta, boton, confirmado){
     boton.disabled=false; boton.textContent=txt;
     if(r.confirmar){if(confirm(r.aviso))return cambiarCarpeta(r.carpeta,boton,true);verCarpetas();return}
     if(r.ok){
-      c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo: '+r.total.toLocaleString('es-CL')+' modelos encontrados en la carpeta nueva.</p>';
+      c.innerHTML='<p class="sub" style="color:var(--ok)">✓ Listo: '+plural(r.total,'modelo encontrado','modelos encontrados')+' en la carpeta nueva.</p>';
       toast('Carpeta cambiada'); document.getElementById('rutaManual').value='';
       cargar().then(function(){ verAjustes(); aplicar(); });
     } else {
@@ -2111,27 +2148,28 @@ document.getElementById('rutaManual').addEventListener('keydown',function(e){
   if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnUsarRuta').click(); }
 });
 document.getElementById('btnReindexar').onclick=function(){
-  var b=this; b.textContent='Buscando...'; b.disabled=true;
+  var b=this, original=b.textContent; b.textContent='Buscando...'; b.disabled=true;
   api('/api/reindexar',{}).then(function(r){
-    b.textContent='Buscar modelos nuevos'; b.disabled=false;
-    if(r.ok){ toast('Listo: '+r.total.toLocaleString('es-CL')+' modelos'); cargar().then(function(){verAjustes()}); }
+    b.textContent=original; b.disabled=false;
+    if(r.ok){ toast('Listo: '+plural(r.total,'modelo','modelos')); cargar().then(function(){verAjustes()}); }
     else toast(r.error||'No se pudo',true);
-  }).catch(function(){b.textContent='Buscar modelos nuevos';b.disabled=false});
+  }).catch(function(){b.textContent=original;b.disabled=false});
 };
 
 // ---------------- formularios (modal 2) ----------------
 var f2={};
-function abrirF2(tit,html,onOk,onDel){
+function abrirF2(tit,html,onOk,onDel,confirmaPropia){
   document.getElementById('f2Tit').textContent=tit;
   document.getElementById('f2Body').innerHTML=html;
   document.getElementById('f2Del').style.visibility=onDel?'visible':'hidden';
-  f2={ok:onOk,del:onDel};
+  f2={ok:onOk,del:onDel,confirmaPropia:!!confirmaPropia};
   document.getElementById('velo2').classList.add('on');
 }
 document.getElementById('f2Cerrar').onclick=function(){document.getElementById('velo2').classList.remove('on')};
 document.getElementById('velo2').addEventListener('click',function(e){if(e.target===this)this.classList.remove('on')});
 document.getElementById('f2Ok').onclick=function(){ if(this.disabled)return;var campos=document.getElementById('f2Body').querySelectorAll('input');if(Array.from(campos).some(function(e){return !e.checkValidity()}))return toast('Revisa los números antes de guardar.',true);if(f2.ok) f2.ok() };
-document.getElementById('f2Del').onclick=function(){ if(f2.del&&confirm('¿Eliminar?')) f2.del() };
+// Si el formulario ya hace su propia pregunta (clientes), no se pregunta dos veces.
+document.getElementById('f2Del').onclick=function(){ if(f2.del&&(f2.confirmaPropia||confirm('¿Eliminar?'))) f2.del() };
 function cerrarF2(){document.getElementById('velo2').classList.remove('on')}
 
 function formCliente(c){
@@ -2144,7 +2182,7 @@ function formCliente(c){
     function(){ if(!val('c_nom'))return toast('Escribe el nombre',true);
       api('/api/cliente',{id:c.id,nombre:val('c_nom'),telefono:val('c_tel'),email:val('c_mail'),notas:val('c_not')})
         .then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();verClientes();cerrarF2();toast('Cliente guardado')}) },
-    c.id?function(){if(!confirm('¿Eliminar este cliente y desvincular sus modelos, ventas y encargos entregados? Se conservarán todos esos datos. Si tiene encargos pendientes, primero debes entregarlos o asignarlos a otro cliente.'))return;api('/api/cliente/borrar',{id:c.id}).then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();verClientes();cargar();cerrarF2();toast('Cliente eliminado')})}:null);
+    c.id?function(){if(!confirm('¿Eliminar este cliente y desvincular sus modelos, ventas y encargos entregados? Se conservarán todos esos datos. Si tiene encargos pendientes, primero debes entregarlos o asignarlos a otro cliente.'))return;api('/api/cliente/borrar',{id:c.id}).then(function(r){CLIENTES=r.clientes;pintarClientes();actualizarPills();verClientes();cargar();cerrarF2();toast('Cliente eliminado')})}:null,true);
 }
 
 function formPedido(p){

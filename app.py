@@ -328,6 +328,45 @@ def recordar_rutas():
         m = POR_REL.get(rel)
         if m and not mt.get("ruta_guardada") and not mt.get("no_encontrado") and ruta_segura(m["ruta"]):
             db.guardar_meta(rel, {"ruta_guardada": m["ruta"]})
+    recordar_firmas()
+
+
+def firma_modelo(m):
+    """Qué archivos trae un modelo: sirve para reconocerlo si cambia de carpeta."""
+    archivos = m.get("archivos") or {}
+    nombres = archivos.get("corte") or [a for grupo in archivos.values() for a in grupo]
+    return sorted(set(a.lower() for a in nombres)), m.get("mb")
+
+
+def recordar_firmas():
+    guardadas = db.firmas_todas()
+    nuevas = []
+    for rel, mt in db.meta_todos().items():
+        m = POR_REL.get(rel)
+        if not m or mt.get("no_encontrado") or not tiene_datos(mt):
+            continue
+        nombres, mb = firma_modelo(m)
+        texto = json.dumps(nombres, ensure_ascii=False)
+        previa = guardadas.get(rel)
+        if not previa or previa["nombres"] != texto or previa["mb"] != mb:
+            nuevas.append((rel, texto, mb))
+    db.guardar_firmas(nuevas)
+
+
+def parecido_por_archivos(firma, m):
+    """¿La carpeta m trae los mismos archivos que guardó el modelo perdido?"""
+    try:
+        viejos = set(json.loads(firma["nombres"]))
+    except (TypeError, ValueError):
+        return False
+    nuevos, mb = firma_modelo(m)
+    nuevos = set(nuevos)
+    if not viejos or not nuevos or len(viejos & nuevos) / len(viejos | nuevos) < 0.8:
+        return False
+    viejo_mb = firma["mb"]
+    if viejo_mb is not None and mb is not None and abs(viejo_mb - mb) > max(0.05, 0.02 * viejo_mb):
+        return False
+    return True
 
 
 @db.atomico
@@ -361,14 +400,19 @@ def guardar_meta_modelo(rel, campos):
 
 def no_encontrados():
     salida = []
-    for rel, mt in db.meta_todos().items():
+    firmas = db.firmas_todas()
+    metas = db.meta_todos()
+    for rel, mt in metas.items():
         if rel in POR_REL and not mt.get("no_encontrado"):
             continue
         if not tiene_datos(mt):
             continue
         final = rel.replace("\\", "/").split("/")[-1].lower()
+        firma = firmas.get(rel)
+        # Misma carpeta por nombre, o carpeta nueva con los mismos archivos.
         sugeridas = [{"rel": m["rel"], "nombre": m["nombre"], "ruta": m["ruta"]} for m in MODELOS
-                     if os.path.basename(m["ruta"]).lower() == final]
+                     if os.path.basename(m["ruta"]).lower() == final
+                     or (firma and not tiene_datos(metas.get(m["rel"]) or {}) and parecido_por_archivos(firma, m))]
         salida.append({"rel": rel, "nombre": mt.get("nombre") or rel, "ruta": mt.get("ruta_guardada") or rel,
                        "sugeridas": sugeridas})
     return salida
@@ -605,8 +649,9 @@ def crear_categoria(nombre):
     actuales = [g["nombre"] for g in categorias_con_conteo(vistas_todas())]
     if nombre in actuales:
         return {"error": "Ya existe una categoría con ese nombre."}
-    if len(actuales) >= 6:
-        return {"error": "Puedes tener hasta 6 categorías grandes. Saca una antes de crear otra."}
+    # «Otros» siempre está: no cuenta para el máximo de 6.
+    if len([a for a in actuales if a != "Otros"]) >= 6:
+        return {"error": "Puedes tener hasta 6 categorías grandes («Otros» no cuenta). Saca una antes de crear otra."}
     db.guardar_cat(nombre, orden=len(actuales), propia=True, oculta=False)
     return {"ok": True, "nombre": nombre}
 
@@ -961,7 +1006,16 @@ def guardar_edicion(rel, campos):
 
 def archivo_para_programa(m, programa, principal=""):
     archivos = [a for grupo in m["archivos"].values() for a in grupo]
-    return formatos.elegir_archivo(m["ruta"], archivos, programa, principal)
+    return formatos.elegir_archivo(m["ruta"], archivos, programa, principal,
+                                   manuales=m["archivos"].get("manual") or ())
+
+
+def motivo_sin_archivo(m, cual):
+    """Por qué no se puede abrir: disco ausente o de verdad no hay archivo."""
+    mensaje = error_ruta(m["ruta"], True)
+    if mensaje:
+        return mensaje
+    return "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + "."
 
 
 @db.exclusivo
@@ -1914,7 +1968,8 @@ def volver_respaldo(nombre, restaurar_raices=False):
         if origen.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise ValueError("copia dañada")
         tablas = {x[0] for x in origen.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        necesarias = {x[0] for x in db.cx().execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        # "firmas" es un dato derivado: las copias anteriores a que existiera siguen sirviendo.
+        necesarias = {x[0] for x in db.cx().execute("SELECT name FROM sqlite_master WHERE type='table'")} - {"firmas"}
         if not necesarias.issubset(tablas):
             raise ValueError("copia incompleta")
         # Separar la fuente de su archivo antes de aplicar la retención:
@@ -2336,7 +2391,7 @@ class Handler(BaseHTTPRequestHandler):
                     "puede": puede,
                     "archivo": nombre or "",
                     "instalado": bool(buscar_programa(cual)),
-                    "motivo": "" if puede else "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + ".",
+                    "motivo": "" if puede else motivo_sin_archivo(m, cual),
                 }
             return self._send(200, d)
 
@@ -2397,7 +2452,7 @@ class Handler(BaseHTTPRequestHandler):
 
             elegido = archivo_para_programa(m, cual, meta_asociada(rel).get("principal", ""))
             if not elegido:
-                return self._send(400, {"error": "Este modelo no trae un archivo que pueda abrir " + PROGRAMAS_DEF[cual]["nombre"] + "."})
+                return self._send(400, {"error": motivo_sin_archivo(m, cual)})
             ruta = os.path.join(m["ruta"], elegido)
             mensaje = error_ruta(ruta)
             if mensaje:

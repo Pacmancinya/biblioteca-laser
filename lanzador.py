@@ -66,18 +66,21 @@ def _traer_datos_viejos():
 
     vieja = encontradas[0]
     info = migrar.resumen(vieja)
+    def cuenta(n, uno, varios):
+        return "%d %s" % (n, uno if n == 1 else varios)
+
     detalle = []
     if info["modelos"]:
-        detalle.append("%d modelos con datos tuyos" % info["modelos"])
+        detalle.append(cuenta(info["modelos"], "modelo con datos tuyos", "modelos con datos tuyos"))
     if info["favoritos"]:
-        detalle.append("%d favoritos" % info["favoritos"])
+        detalle.append(cuenta(info["favoritos"], "favorito", "favoritos"))
     if info["clientes"]:
-        detalle.append("%d clientes" % info["clientes"])
+        detalle.append(cuenta(info["clientes"], "cliente", "clientes"))
     if info["ventas"]:
-        detalle.append("%d ventas" % info["ventas"])
+        detalle.append(cuenta(info["ventas"], "venta", "ventas"))
 
-    texto = ("Encontre una version anterior de la Biblioteca en:\n\n%s\n\n"
-             "%s\n\n¿Quieres traer esos datos a esta version?\n\n"
+    texto = ("Encontré una versión anterior de la Biblioteca en:\n\n%s\n\n"
+             "%s\n\n¿Quieres traer esos datos a esta versión?\n\n"
              "(La carpeta vieja no se toca ni se borra.)"
              % (vieja, ("Tiene: " + ", ".join(detalle)) if detalle
                 else "Tiene tus ajustes guardados."))
@@ -87,8 +90,8 @@ def _traer_datos_viejos():
     if r.get("error"):
         _avisar_error(TITULO, r["error"])
     else:
-        _avisar_error(TITULO, "Listo, ya tienes tus datos aqui.\n\n"
-                              "Tus favoritos, precios, clientes y ventas estan como los dejaste.")
+        _avisar_error(TITULO, "Listo, ya tienes tus datos aquí.\n\n"
+                              "Tus favoritos, precios, clientes y ventas están como los dejaste.")
 
 
 def _primera_vez(app):

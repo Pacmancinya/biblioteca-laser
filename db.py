@@ -242,6 +242,14 @@ CREATE INDEX IF NOT EXISTS ix_ven_fecha ON ventas(fecha);
 CREATE INDEX IF NOT EXISTS ix_ver_rel ON versiones(rel, tipo);
 CREATE INDEX IF NOT EXISTS ix_mod_fav ON modelos(favorito);
 
+-- Los archivos de cada modelo con datos propios, para reconocerlo si algún día
+-- la carpeta cambia de lugar o de nombre ("Modelos que ya no encuentro").
+CREATE TABLE IF NOT EXISTS firmas (
+  rel     TEXT PRIMARY KEY,
+  nombres TEXT,
+  mb      REAL
+);
+
 CREATE TABLE IF NOT EXISTS importaciones (
   origen TEXT, tabla TEXT, id_original TEXT, id_local INTEGER,
   PRIMARY KEY (origen, tabla, id_original)
@@ -802,6 +810,18 @@ def guardar_huellas(lista):
     if not lista:
         return
     cx().executemany("INSERT OR REPLACE INTO huellas (ruta,tam,mtime,hash) VALUES (?,?,?,?)", lista)
+    cx().commit()
+
+
+def firmas_todas():
+    return {r["rel"]: r for r in filas("SELECT * FROM firmas")}
+
+@atomico
+def guardar_firmas(lista):
+    """lista de (rel, nombres_json, mb)"""
+    if not lista:
+        return
+    cx().executemany("INSERT OR REPLACE INTO firmas (rel,nombres,mb) VALUES (?,?,?)", lista)
     cx().commit()
 
 

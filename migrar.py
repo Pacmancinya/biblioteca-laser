@@ -51,10 +51,12 @@ def _es_instalacion(carpeta):
 
 def buscar(saltar=None):
     """Devuelve las instalaciones anteriores encontradas, de mas nueva a mas vieja."""
-    saltar = os.path.abspath(saltar or "").lower()
+    # La ruta se conserva tal cual para mostrarla; solo se compara en minúsculas.
+    saltar_real = os.path.abspath(saltar) if saltar else ""
+    saltar = saltar_real.lower()
     vistas = set()
     encontradas = []
-    for lugar in _lugares(saltar):
+    for lugar in _lugares(saltar_real or None):
         try:
             hijos = os.listdir(lugar)
         except OSError:

@@ -50,8 +50,10 @@ def _archivo(ruta):
 
 def planificar(rutas, raiz):
     """Solo lectura: valida toda la selección antes de crear un solo destino."""
-    if not os.path.isdir(raiz):
+    if not raiz:
         raise ValueError("Elige primero tu carpeta principal de modelos en Ajustes.")
+    if not os.path.isdir(raiz):
+        raise ValueError("No encuentro la carpeta de modelos %s. ¿Está conectado el disco?" % raiz)
     _sin_enlaces(raiz)
     seleccion = list(dict.fromkeys(os.path.abspath(r) for r in rutas if r))
     if not seleccion:

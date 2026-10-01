@@ -16,16 +16,23 @@ CERRADOS = {".cdr", ".cmx"}
 LIGHTBURN = {".lbrn", ".lbrn2"}
 
 PRIORIDADES = {
-    "corel": (".cdr", ".ai", ".eps", ".svg", ".pdf", ".dxf"),
+    # El PDF va al final: casi siempre es el manual, no el dibujo.
+    "corel": (".cdr", ".ai", ".eps", ".svg", ".dxf", ".pdf"),
     "lightburn": (".lbrn2", ".lbrn", ".svg", ".dxf", ".ai"),
 }
 
 
-def elegir_archivo(carpeta, archivos, programa, principal=""):
-    """Solo archivos del modelo que existen; el principal compatible manda."""
+def elegir_archivo(carpeta, archivos, programa, principal="", manuales=()):
+    """Solo archivos del modelo que existen; el principal compatible manda.
+
+    Un archivo que la biblioteca clasifica como manual nunca se elige como dibujo.
+    """
     prioridad = PRIORIDADES.get(programa, ())
+    manuales = set(manuales or ())
     existentes = []
     for nombre in archivos:
+        if nombre in manuales:
+            continue
         # Un nombre de archivo, nunca una ruta fuera de la carpeta del modelo.
         if os.path.basename(nombre) != nombre or "/" in nombre or "\\" in nombre:
             continue

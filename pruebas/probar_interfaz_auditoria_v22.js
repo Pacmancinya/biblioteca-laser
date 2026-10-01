@@ -54,14 +54,16 @@ function cargar(desde, hasta) {vm.runInContext(script.slice(script.indexOf(desde
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
+  // Singular y plural reales de la interfaz.
+  cargar('function tamañoAgregado(bytes)', 'function mostrarNuevos');
   // 1: todos los botones de quitar comparten el aviso de carpetas con submodelos.
   cargar('function confirmarQuitarModelo(rel)', 'function destinoElemento');
   c.MODELOS=[{rel:'.',ruta:'D:/modelos'},{rel:'hijo',ruta:'D:/modelos/hijo'}];
   let confirmacion='';
   c.confirm=texto=>{confirmacion=texto;return false;};
   c.quitarModelo('.');
-  assert.match(confirmacion,/contiene 1 modelos/);
-  assert.match(confirmacion,/Solo se quitará este/);
+  assert.match(confirmacion,/contiene 1 modelo\./);
+  assert.match(confirmacion,/Solo se quitará este; el de adentro seguirá visible/);
   assert.match(script,/confirmarQuitarModelo\(d\.dataset\.deldup\)/);
 
   // 7 y 30: la ficha incluye el archivo 85, cuenta real y título actualizado.
@@ -145,9 +147,11 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   // 15: el botón de Releer también vuelve a estar disponible tras un error.
   c.api=async()=>{throw new Error('Disco ausente');};
   cargar("document.getElementById('btnReindexar').onclick", '// ---------------- formularios');
+  elem('btnReindexar').textContent='🔄 Releer todo y reordenar';
   elem('btnReindexar').onclick();await tick();
   assert.equal(elem('btnReindexar').disabled,false);
-  assert.equal(elem('btnReindexar').textContent,'Buscar modelos nuevos');
+  // El texto del botón no cambia tras una falla.
+  assert.equal(elem('btnReindexar').textContent,'🔄 Releer todo y reordenar');
 
   // 27: Escape cierra Abrir con y la burbuja, además de las fichas.
   vm.runInContext(script.slice(script.lastIndexOf("document.addEventListener('keydown'")),c);
