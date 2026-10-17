@@ -13,7 +13,7 @@ import os, sys, json, re, threading, webbrowser, subprocess, urllib.parse, mimet
 import base64, io          # miniaturas de LightBurn
 import sqlite3, uuid, tempfile
 from datetime import datetime
-from functools import wraps
+from functools import wraps, lru_cache
 from contextlib import closing
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -26,8 +26,8 @@ import seguridad_archivos
 
 CONGELADO = getattr(sys, "frozen", False)   # True cuando corre como .exe
 
-APP_VERSION = "2.2"
-APP_NOMBRE = "Ordenado y tranquilo"
+APP_VERSION = "2.3"
+APP_NOMBRE = "Rápido y en orden"
 # De dónde se bajan las actualizaciones (ZIP con los archivos de la app).
 URL_ACTUALIZACIONES = "https://raw.githubusercontent.com/Pacmancinya/biblioteca-laser/main/version.json"
 # A quién le llegan las ideas/cambios que anota el usuario (WhatsApp de Ruperto).
@@ -55,6 +55,13 @@ EXT_CORTE = {".dxf", ".svg", ".eps", ".cdr", ".ai", ".lbrn", ".lbrn2", ".plt", "
 
 # ---------------------------------------------------------------- índice
 VACIO = {"raiz": "", "modelos": [], "categorias": [], "total_modelos": 0}
+
+
+@lru_cache(maxsize=None)
+def _ruta_normal(ruta):
+    """Ruta en minúsculas y sin '..', sin tocar el disco (realpath consulta el disco por
+    cada carpeta: 4.325 modelos tardaban más de un segundo cada vez que se abría una ficha)."""
+    return os.path.normcase(os.path.abspath(ruta))
 
 
 def cargar_indice():
@@ -546,6 +553,21 @@ def modelo_vista(m, metas=None):
     }
 
 
+def _clave_alfabetica(texto):
+    """Para ordenar de la A a la Z sin distinguir mayúsculas ni tildes (la ñ queda después de la n)."""
+    import unicodedata
+    salida = []
+    for letra in str(texto or "").strip().lower():
+        if letra == "ñ":
+            salida.append("n" + chr(0x10FFFF))  # justo después de la n y antes de la o
+            continue
+        base = "".join(c for c in unicodedata.normalize("NFD", letra) if unicodedata.category(c) != "Mn")
+        salida.append(base)
+    texto_plano = "".join(salida)
+    # números en orden natural: "caja 2" antes de "caja 10"
+    return [(0, int(p), "") if p.isdigit() else (1, 0, p) for p in re.split(r"(\d+)", texto_plano) if p != ""]
+
+
 def categorias_con_conteo(vistas):
     """Las 6 categorías grandes con sus subcategorías y cuántos modelos tiene cada una."""
     import categorias as cats
@@ -615,7 +637,15 @@ def categorias_con_conteo(vistas):
     salida.sort(key=clave)
     orden_sub = {(r["categoria"], r["subcategoria"]): r["orden"] for r in db.filas("SELECT * FROM subcats")}
     for g in salida:
-        g["subs"].sort(key=lambda sub: orden_sub.get((g["nombre"], sub["nombre"]), 999))
+        # Orden de las subcategorías: 1) el que el usuario dejó con las flechas o arrastrando;
+        # 2) las de fábrica, en su orden pensado; 3) las que salieron de las carpetas o creó el
+        # usuario sin ordenarlas, de la A a la Z. El orden manual no se toca.
+        posicion = {s["nombre"]: i for i, s in enumerate(g["subs"])}
+        g["subs"].sort(key=lambda sub: (
+            orden_sub.get((g["nombre"], sub["nombre"]), 999),
+            1 if sub.get("propia") else 0,
+            0 if sub.get("propia") else posicion[sub["nombre"]],
+            _clave_alfabetica(sub["nombre"]) if sub.get("propia") else ""))
         g["propia"] = g["nombre"] in propias_cat
     return salida
 
@@ -1052,7 +1082,29 @@ def vista_previa_lightburn(m):
     return None
 
 
+_CERROJOS_MINIATURA = {}
+_SIN_MINIATURA = {}
+
+
 def miniatura(rel):
+    """Miniatura del modelo, o None si no se puede dibujar. Si ya se intentó y no se pudo,
+    no se vuelve a intentar mientras el modelo no cambie (antes cada vuelta de la lista
+    releía y volvía a fallar el mismo archivo)."""
+    m = POR_REL.get(rel)
+    clave = (_REVISIONES.get(rel), m.get("mtime") if m else None)
+    previo = _SIN_MINIATURA.get(rel)
+    # el "no se puede" se recuerda 10 minutos: un fallo pasajero (archivo en uso) no queda para siempre
+    if m and previo and previo[0] == clave and time.time() - previo[1] < 600:
+        return None
+    res = _miniatura_calcular(rel)
+    if res is None and m:
+        _SIN_MINIATURA[rel] = (clave, time.time())
+    else:
+        _SIN_MINIATURA.pop(rel, None)
+    return res
+
+
+def _miniatura_calcular(rel):
     m = POR_REL.get(rel)
     if not m:
         return None
@@ -1093,26 +1145,39 @@ def miniatura(rel):
             return f.read(), mimetypes.guess_type(origen)[0] or "image/jpeg"
     h = hashlib.md5(rel.encode("utf-8")).hexdigest()
     destino = os.path.join(CACHE_THUMBS, h + ".jpg")
-    try:
-        if not os.path.exists(destino) or os.path.getmtime(destino) < os.path.getmtime(origen):
-            if dibujo:
-                if not formatos.dibujar_previa(origen, destino):
-                    return None
-                im = Image.open(destino).convert("RGB")
-            elif lbrn:
-                res = miniatura_lightburn(origen, destino + ".png")
-                if not res.get("ok"):
-                    return None
-                im = Image.open(destino + ".png").convert("RGB")
-                retirar_miniatura(destino + ".png")
-            else:
-                im = Image.open(origen).convert("RGB")
-            im.thumbnail((520, 520), Image.LANCZOS)
-            im.save(destino, "JPEG", quality=82)
-    except Exception:
-        return None
-    with open(destino, "rb") as f:
-        return f.read(), "image/jpeg"
+    # Un pedido a la vez por miniatura (las demás siguen en paralelo): si dos piden la
+    # misma, la segunda espera y usa la ya hecha.
+    with _CERROJOS_MINIATURA.setdefault(h, threading.Lock()):
+        try:
+            if not os.path.exists(destino) or os.path.getmtime(destino) < os.path.getmtime(origen):
+                if dibujo:
+                    if not formatos.dibujar_previa(origen, destino):
+                        return None
+                    im = Image.open(destino).convert("RGB")
+                elif lbrn:
+                    res = miniatura_lightburn(origen, destino + ".png")
+                    if not res.get("ok"):
+                        return None
+                    im = Image.open(destino + ".png").convert("RGB")
+                    retirar_miniatura(destino + ".png")
+                else:
+                    im = Image.open(origen).convert("RGB")
+                im.thumbnail((520, 520), Image.LANCZOS)
+                # Se guarda aparte y se cambia de nombre al final: nunca queda una imagen a medias.
+                temporal = "%s.%d.tmp" % (destino, threading.get_ident())
+                try:
+                    im.save(temporal, "JPEG", quality=82)
+                    os.replace(temporal, destino)
+                finally:
+                    if os.path.exists(temporal):
+                        os.remove(temporal)
+        except Exception:
+            return None
+        try:
+            with open(destino, "rb") as f:
+                return f.read(), "image/jpeg"
+        except OSError:
+            return None
 
 
 
@@ -2309,9 +2374,21 @@ class Handler(BaseHTTPRequestHandler):
         return datos
 
     # ------------------------------------------------------------ GET
-    @respuesta_segura
-    @db.exclusivo
+    # Estas lecturas no cambian nada ni necesitan que el resto espere: las miniaturas
+    # (decenas a la vez al recorrer la lista) y los archivos. Si esperaran el candado
+    # general, una sola miniatura lenta o un archivo grande dejaba trabada a toda la
+    # ventana y las fotos "a veces no cargaban".
+    RUTAS_SIN_CANDADO = ("/thumb", "/api/archivo", "/inicio", "/", "/index.html")
+
     def do_GET(self):
+        ruta = urllib.parse.urlparse(self.path).path
+        if ruta in self.RUTAS_SIN_CANDADO:
+            return self._atender_get()
+        with db.LOCK:
+            return self._atender_get()
+
+    @respuesta_segura
+    def _atender_get(self):
         u = urllib.parse.urlparse(self.path)
         r = u.path
         q = urllib.parse.parse_qs(u.query)
@@ -2354,8 +2431,8 @@ class Handler(BaseHTTPRequestHandler):
             d = dict(m)
             d["aviso_disco"] = aviso
             d["vista"] = modelo_vista(m)
-            padre = os.path.normcase(os.path.realpath(m["ruta"])).rstrip(os.sep) + os.sep
-            d["submodelos"] = sum(os.path.normcase(os.path.realpath(x["ruta"])).startswith(padre) for x in MODELOS)
+            padre = _ruta_normal(m["ruta"]).rstrip(os.sep) + os.sep
+            d["submodelos"] = sum(_ruta_normal(x["ruta"]).startswith(padre) for x in MODELOS)
             d["medidas_mm"] = None
             if not aviso:
                 for archivo in m["archivos"]["corte"]:
@@ -2400,7 +2477,10 @@ class Handler(BaseHTTPRequestHandler):
             if not res:
                 return self._send(404, b"", "text/plain")
             body, ctype = res
-            return self._send(200, body, ctype, {"Cache-Control": "no-cache"})
+            # Con "v" (la revisión del modelo) la dirección cambia cuando cambia la foto,
+            # así que el navegador puede guardarla. Sin "v" se revisa siempre.
+            guardable = "no-cache" if not arg("v") else "max-age=86400"
+            return self._send(200, body, ctype, {"Cache-Control": guardable})
 
         if r == "/api/archivo":
             p = arg("p")
@@ -2920,14 +3000,22 @@ def invalidar_miniatura(rel):
 
 def retirar_miniatura(ruta):
     if seguridad_archivos.archivo_propio(ruta, CACHE_THUMBS, r"[a-f0-9]{32}\.jpg(?:\.png)?"):
-        os.remove(ruta)
+        try:
+            os.remove(ruta)
+        except OSError:
+            # En Windows no se puede borrar un archivo que alguien está leyendo justo ahora.
+            # No es grave: la miniatura se rehace sola cuando cambie el original.
+            pass
 
 
 def aviso_stock_antiguo(venta):
     return {"confirmar_stock": True, "aviso": "Esta venta es anterior a la versión 2.2: no sé cuánto stock descontó. ¿Quieres devolver %s unidades al stock?" % venta["cantidad"]}
 
 
-def _releer_carpeta(ruta):
+def _releer_carpeta(ruta, cambios=None):
+    """Vuelve a leer una carpeta. Si no cambió nada, deja todo como estaba (no borra su
+    miniatura ni obliga a reescribir el índice). `cambios`, si se pasa, recibe True
+    cuando algo cambió de verdad."""
     raiz, marca = contexto_carpeta(ruta)
     rel = os.path.relpath(ruta, raiz)
     if marca:
@@ -2936,11 +3024,16 @@ def _releer_carpeta(ruta):
     nuevo = indexar.leer_modelo(ruta, raiz, marca,
                                anterior["id"] if anterior else max((m["id"] for m in MODELOS), default=-1) + 1,
                                POR_REL)
+    if nuevo:
+        aplicar_preferencias(nuevo)
+    if anterior and nuevo and nuevo == anterior:
+        return anterior
+    if cambios is not None:
+        cambios.append(True)
     if anterior:
         MODELOS.remove(anterior)
         POR_REL.pop(rel, None)
     if nuevo:
-        aplicar_preferencias(nuevo)
         MODELOS.append(nuevo)
         POR_REL[rel] = nuevo
     invalidar_miniatura(rel)
@@ -2954,7 +3047,10 @@ def recargar_parcial(rel):
     if not m:
         return
     posicion = MODELOS.index(m)
-    nuevo = _releer_carpeta(m["ruta"])
+    cambios = []
+    nuevo = _releer_carpeta(m["ruta"], cambios)
+    if not cambios:
+        return nuevo  # nada cambió: no se reescribe el índice de 4 MB
     if nuevo:
         MODELOS.remove(nuevo)
         MODELOS.insert(posicion, nuevo)
@@ -2964,13 +3060,14 @@ def recargar_parcial(rel):
 
 @db.exclusivo
 def releer_arbol(ruta):
-    nuevos = []
+    nuevos, cambios = [], []
     for carpeta, dirs, _ in os.walk(ruta):
         dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d.lower() not in indexar.CARPETAS_INTERNAS)
-        m = _releer_carpeta(carpeta)
+        m = _releer_carpeta(carpeta, cambios)
         if m:
             nuevos.append(m["rel"])
-    guardar_indice()
+    if cambios:
+        guardar_indice()
     return nuevos
 
 
@@ -3033,6 +3130,12 @@ def preparar(avisar=None):
     di("Listo")
 
 
+class Servidor(ThreadingHTTPServer):
+    # Por defecto la cola de espera es de 5 conexiones: al recorrer la lista el navegador
+    # pide decenas de miniaturas juntas y las que sobraban se perdían ("a veces no cargan").
+    request_queue_size = 128
+
+
 def arrancar_servidor():
     """Levanta el servidor en segundo plano y devuelve (servidor, direccion).
     Si el puerto esta ocupado, busca otro: asi no falla si quedo algo abierto."""
@@ -3040,7 +3143,7 @@ def arrancar_servidor():
     ultimo = None
     for intento in range(12):
         try:
-            srv = ThreadingHTTPServer(("127.0.0.1", PUERTO), Handler)
+            srv = Servidor(("127.0.0.1", PUERTO), Handler)
             break
         except OSError as e:
             ultimo = e
@@ -3065,7 +3168,7 @@ def main():
     print("=" * 54)
     print("  Deja esta ventana abierta mientras uses la biblioteca.")
     print()
-    srv = ThreadingHTTPServer(("127.0.0.1", PUERTO), Handler)
+    srv = Servidor(("127.0.0.1", PUERTO), Handler)
     threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{PUERTO}")).start()
     try:
         srv.serve_forever()

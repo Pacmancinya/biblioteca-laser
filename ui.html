@@ -113,6 +113,11 @@
   .sb:hover{border-color:var(--amb);color:var(--tx)}
   .sb.on{background:var(--amb-dim);border-color:var(--amb);color:var(--amb2);font-weight:600}
   .sb .n{font-family:var(--fm);font-size:12px;opacity:.75;margin-left:4px}
+  .orden-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:13px}
+  .orden-tit{font-weight:700;font-size:16px;color:var(--tx2)}
+  .orden-b{min-height:44px;min-width:88px;justify-content:center;font-size:16px;font-weight:600}
+  .orden-b:hover{border-color:var(--amb)}
+  .orden-b.on{background:var(--amb-dim);border-color:var(--amb);color:var(--amb2)}
   .activos{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:13px}
   .activos:empty{display:none}
   .act{background:var(--amb-dim);border:1px solid var(--amb);color:var(--amb2);border-radius:99px;padding:5px 8px 5px 12px;font-size:14px;display:inline-flex;align-items:center;gap:7px;font-family:var(--fd)}
@@ -409,6 +414,11 @@
         <div class="subs" id="subs"></div>
       </details>
       <p class="sub">Arrastra un modelo a una categoría. Ctrl+clic para marcar varios. También puedes soltar carpetas del Explorador para agregarlas.</p>
+      <div class="orden-barra" id="ordenBarra" role="group" aria-label="Ordenar los modelos">
+        <span class="orden-tit">Ordenar:</span>
+        <button class="btn orden-b" id="ordenAZ" data-orden="az" title="De la A a la Z">A → Z</button>
+        <button class="btn orden-b" id="ordenZA" data-orden="za" title="De la Z a la A">Z → A</button>
+      </div>
       <div class="activos" id="activos"></div>
       <div class="grid" id="grid"></div>
       <div class="vacio" id="vacio" style="display:none">No hay modelos con esos filtros.</div>
@@ -781,7 +791,7 @@ function mostrarNuevos(rels,categoria,subcategoria){
   return cargar().then(function(){
     st.q=''; qEl.value=''; st.cat=categoria||''; st.sub=subcategoria||''; st.flags={};st.fmt='';st.gr='';st.verOcultos=false;
     var nuevos=new Set(rels||[]);
-    MODELOS=MODELOS.filter(function(m){return nuevos.has(m.rel)}).concat(MODELOS.filter(function(m){return !nuevos.has(m.rel)}));
+    nuevosPrimero=nuevos.size?nuevos:null; // los recién agregados se ven primero hasta que se cambie el orden
     sincronizarBotones();
     document.querySelector('#tabs [data-v="biblio"]').click();
     pintarCategorias(); aplicar();
@@ -869,10 +879,28 @@ function api(u,d){
   var guardar=d&&document.getElementById('velo2').classList.contains('on')?document.getElementById('f2Ok'):null;
   var bloqueados=[boton,guardar].filter(function(b,i,a){return b&&a.indexOf(b)===i&&!b.disabled});
   bloqueados.forEach(function(b){b.disabled=true});
-  return fetch(u, Object.assign({signal:control.signal},d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:{}))
+  return fetchConReintento(u, Object.assign({signal:control.signal},d?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}:{}), 2)
     .then(function(r){return r.json().then(function(datos){if(!r.ok||datos.error){var e=new Error(datos.error||'No pude completar esta acción.');e.servidor=true;e.datos=datos;throw e}return datos})})
     .catch(function(e){toast(e.name==='AbortError'?'La acción demoró demasiado. Revisa el resultado antes de volver a intentarlo.':e.message||'No pude comunicarme con la biblioteca.',true);throw e})
     .finally(function(){clearTimeout(tiempo);bloqueados.forEach(function(b){b.disabled=false})});
+}
+// Una consulta que falla porque el programa no alcanzó a responder se repite sola (solo las que
+// no cambian nada); las acciones que guardan datos nunca se repiten solas.
+function fetchConReintento(u,opciones,intentos){
+  return fetch(u,opciones).catch(function(e){
+    if(opciones&&opciones.method&&opciones.method!=='GET') throw e;
+    if(e&&e.name==='AbortError') throw e;
+    if(!(intentos>0)) throw e;
+    return new Promise(function(ok){setTimeout(ok,500)}).then(function(){return fetchConReintento(u,opciones,intentos-1)});
+  });
+}
+// Si una foto no llega (el programa estaba ocupado un instante), se vuelve a pedir dos veces
+// antes de rendirse; antes se escondía para siempre y "a veces no cargaban".
+function reintentarImagen(img,reemplazar){
+  var n=Number(img.dataset.intentos||0);
+  if(!img.dataset.origen) img.dataset.origen=img.getAttribute('src');
+  if(n<2){ img.dataset.intentos=n+1; setTimeout(function(){ img.src=img.dataset.origen+'&r='+(n+1); },700*(n+1)); return; }
+  if(reemplazar&&img.parentNode) img.parentNode.innerHTML=SINIMG; else img.style.display='none';
 }
 window.addEventListener('unhandledrejection',function(e){e.preventDefault()});
 
@@ -977,13 +1005,22 @@ function sincronizarBotones(){
   document.querySelectorAll('#filGrosor .fb').forEach(function(b){b.classList.toggle('on',st.gr===b.dataset.gr&&!!st.gr)});
 }
 function limpiarFiltros(){
-  st.q='';st.cat='';st.sub='';st.flags={};st.fmt='';st.gr='';
+  st.q='';st.cat='';st.sub='';st.flags={};st.fmt='';st.gr='';nuevosPrimero=null;
   qEl.value=''; document.getElementById('qx').className='x';
   sincronizarBotones(); pintarCategorias(); aplicar();
 }
 
+// ---------------- botones de orden (A → Z / Z → A) ----------------
+document.getElementById('ordenBarra').addEventListener('click',function(e){
+  var b=e.target.closest('.orden-b'); if(!b) return;
+  ordenModelos=b.dataset.orden==='za'?'za':'az'; nuevosPrimero=null;
+  try{ localStorage.setItem('orden_modelos',ordenModelos); }catch(err){}
+  sincronizarOrden(); aplicar();
+});
+
 // ---------------- filtrado ----------------
 function aplicar(conservar){
+  sincronizarOrden();
   var anterior=mostrados, scroll=document.getElementById('main').scrollTop;
   var q=norm(st.q).split(/\s+/).filter(Boolean);
   var pares={llavero:'keychain',corazon:'heart',caja:'box',lampara:'lamp',reloj:'clock',letrero:'sign'};
@@ -1001,12 +1038,41 @@ function aplicar(conservar){
       for(var j=0;j<q.length;j++){ var sinonimo=pares[q[j]]||Object.keys(pares).find(function(k){return pares[k]===q[j]}); if(txt.indexOf(q[j])<0&&(!sinonimo||txt.indexOf(sinonimo)<0)) return false; } }
     return true;
   });
+  ordenarModelos(filtrados,ordenModelos);
   mostrados=0; grid.innerHTML='';
   document.getElementById('vacio').style.display=filtrados.length?'none':'block';
   document.getElementById('cuenta').innerHTML='<b>'+filtrados.length.toLocaleString('es-CL')+'</b> de '+MODELOS.filter(function(m){return !m.oculto}).length.toLocaleString('es-CL');
   pintarActivos();
   lote();
   if(conservar===true){ while(mostrados<Math.min(anterior,filtrados.length)) lote(); document.getElementById('main').scrollTop=scroll; }
+}
+// ---------------- orden alfabético ----------------
+// Sin distinguir mayúsculas ni tildes, la ñ después de la n, y "Caja 2" antes que "Caja 10".
+var COLACION=new Intl.Collator('es',{numeric:true,sensitivity:'base'});
+var ordenModelos='az', nuevosPrimero=null;
+try{ if(localStorage.getItem('orden_modelos')==='za') ordenModelos='za'; }catch(e){}
+// Nombre sin signos ni espacios al comienzo, para que "(Caja" o "- Gato" no se vayan al principio.
+function claveNombre(m){
+  if(m._kn===undefined||m._kn0!==m.n) { m._kn0=m.n; m._kn=(m.n||'').toString().replace(/^[^\p{L}\p{N}]+/u,'').trim(); }
+  return m._kn;
+}
+function compararNombres(a,b){
+  var r=COLACION.compare(claveNombre(a),claveNombre(b));
+  if(r!==0) return r;
+  r=COLACION.compare((a.n||'').toString(),(b.n||'').toString());
+  return r!==0?r:COLACION.compare(a.rel||'',b.rel||'');
+}
+function ordenarModelos(lista,sentido){
+  var s=sentido==='za'?-1:1;
+  return lista.sort(function(a,b){
+    if(nuevosPrimero){ var na=nuevosPrimero.has(a.rel), nb=nuevosPrimero.has(b.rel); if(na!==nb) return na?-1:1; }
+    return s*compararNombres(a,b);
+  });
+}
+function sincronizarOrden(){
+  document.querySelectorAll('#ordenBarra .orden-b').forEach(function(b){
+    var on=b.dataset.orden===ordenModelos; b.classList.toggle('on',on); b.setAttribute('aria-pressed',on?'true':'false');
+  });
 }
 var SINIMG='<svg class="noimg" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 3-3 7 7"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>';
 function lote(){
@@ -1015,7 +1081,7 @@ function lote(){
     var b=''; if(m.lb)b+='<span class="bdg lb">LBRN</span>'; if(m.man)b+='<span class="bdg man">PDF</span>';
     if(m.d3)b+='<span class="bdg d3">3D</span>'; if(m.stock>0)b+='<span class="bdg stk">'+m.stock+'</span>';
     h+='<div class="card'+(seleccionados[m.rel]?' seleccionada':'')+'" draggable="true" data-rel="'+esc(m.rel)+'">'
-      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'&v='+encodeURIComponent(m.revision||revisionVista)+'" onerror="this.style.display=\'none\'">':SINIMG)
+      + '<div class="ph">'+(m.prev?'<img loading="lazy" src="/thumb?rel='+encodeURIComponent(m.rel)+'&v='+encodeURIComponent(m.revision||revisionVista)+'" onerror="reintentarImagen(this)">':SINIMG)
       + '<button class="estrella'+(m.fav?' on':'')+'" data-fav="'+esc(m.rel)+'"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-2.9L6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg></button>'
       + '<button class="quitar-card" data-quitar-modelo="'+esc(m.rel)+'" title="Quitar de la biblioteca; tus archivos siguen en su carpeta">🗑</button>'
       + '<div class="badges">'+b+'</div></div>'
@@ -1103,7 +1169,7 @@ function abrirModelo(rel){
     var src = m.preview ? '/api/archivo?p='+encodeURIComponent(m.ruta+'/'+m.preview)+'&v='+encodeURIComponent(v.revision||revisionVista)
             : (v.prev ? '/thumb?rel='+encodeURIComponent(m.rel)+'&v='+encodeURIComponent(v.revision||revisionVista) : '');
     if(src){
-      prev.innerHTML='<img src="'+esc(src)+'" onerror="this.parentNode.innerHTML=SINIMG">';
+      prev.innerHTML='<img src="'+esc(src)+'" onerror="reintentarImagen(this,true)">';
       prev.querySelector('img').onclick=function(){document.getElementById('lupaImg').src=src;document.getElementById('lupaFull').classList.add('on')};
     } else prev.innerHTML=SINIMG;
     var corte=m.archivos.corte||[], lb=corte.filter(function(f){return /\.lbrn2?$/i.test(f)});
@@ -1232,7 +1298,7 @@ function pintarDupLote(){
         return '<div class="dupg"><h5>Repetido '+(i+1)+' — '+plural(gr.length,'copia','copias')+'</h5>'
           + gr.filter(function(m){return !MODELOS.some(function(v){return v.rel===m.rel&&v.oculto})}).map(function(m,j){
             return '<div class="dupi">'
-              +(m.prev?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'">':'<div class="th"></div>')
+              +(m.prev?'<img class="th" src="/thumb?rel='+encodeURIComponent(m.rel)+'&v='+encodeURIComponent(m.revision||revisionVista)+'" onerror="reintentarImagen(this)">':'<div class="th"></div>')
               +'<div class="dn"><b>'+esc(m.nombre)+(j===0?' <span class="mejor">más completo</span>':'')+'</b>'
               +'<small>'+esc(m.ruta)+' · '+plural(m.n_corte,'archivo','archivos')+' · '+tamañoMB(m.mb)+(m.fav?' · ★':'')+'</small></div>'
               +'<button class="btn mini" data-verdup="'+esc(m.rel)+'">Ver</button>'

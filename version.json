@@ -1,6 +1,6 @@
 {
-  "version": "2.2",
-  "nombre": "Ordenado y tranquilo",
-  "novedades": "Tu biblioteca queda más ordenada y segura. Arrastra modelos a categorías y agrega archivos desde el Explorador. Quitar un modelo solo lo esconde, aunque tenga otros modelos adentro. Las fotos nuevas aparecen al tiro y la ficha muestra todos los archivos. Si desconectas el disco, te avisa y conserva la biblioteca. Si cambias o mueves una carpeta, puedes recuperar sus precios y notas en Limpieza. Los respaldos recuperan tus datos completos sin repetir ventas. Editar o borrar una venta corrige el stock. El Panel incluye los abonos de encargos por separado. Cotizar recuerda el material y las medidas; buscar repetidos muestra avance y permite cancelar. Cada cambio de organización tiene una copia para volver atrás.",
+  "version": "2.3",
+  "nombre": "Rápido y en orden",
+  "novedades": "Ahora puedes ordenar tus modelos de la A a la Z o de la Z a la A con los botones grandes de arriba de la lista, y la app recuerda cómo lo dejaste. Va más rápido: abrir un modelo ya no se demora y las fotos aparecen antes. Las fotos que a veces no cargaban ahora se vuelven a pedir solas.",
   "zip": "https://github.com/Pacmancinya/biblioteca-laser/archive/refs/heads/main.zip"
 }

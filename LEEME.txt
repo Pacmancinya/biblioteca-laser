@@ -225,6 +225,18 @@ BUSCAR Y FILTRAR
 * "Quitar filtros" deja todo como al principio.
 
 
+ORDENAR LA LISTA (A -> Z)
+-------------------------
+Arriba de los modelos, junto a "Ordenar:", hay dos botones:
+   A -> Z    de la A a la Z
+   Z -> A    de la Z a la A
+El que esta pintado es el que esta usando. La app recuerda como lo
+dejaste. Ordena sin fijarse en mayusculas ni tildes, y "Caja 2" va
+antes que "Caja 10". Tambien vale dentro de una categoria y cuando
+buscas algo. Los modelos que acabas de agregar se ven primero
+hasta que toques uno de los dos botones.
+
+
 AL HACER CLIC EN UN MODELO
 --------------------------
 Se abre su ficha con estas pestanas:
